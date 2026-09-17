@@ -70,8 +70,8 @@ import com.jakewharton.processphoenix.ProcessPhoenix
 import com.movtery.inputmap.keycodes.LwjglGlfwKeycode
 import com.movtery.zalithlauncher.R
 import com.movtery.zalithlauncher.bridge.CURSOR_DISABLED
-import com.movtery.zalithlauncher.bridge.LoggerBridge
 import com.movtery.zalithlauncher.bridge.FliteTts
+import com.movtery.zalithlauncher.bridge.LoggerBridge
 import com.movtery.zalithlauncher.bridge.ZLBridge
 import com.movtery.zalithlauncher.bridge.ZLBridgeStates
 import com.movtery.zalithlauncher.coroutine.DataBridge
@@ -136,11 +136,6 @@ private const val INTENT_RUN_GAME = "BUNDLE_RUN_GAME"
 private const val INTENT_RUN_JAR = "INTENT_RUN_JAR"
 private const val INTENT_GAME_CONFIG = "INTENT_GAME_CONFIG"
 private const val INTENT_JAR_INFO = "INTENT_JAR_INFO"
-
-/**
- * 事件驱动尺寸刷新的去抖间隔
- */
-private val RESIZE_DEBOUNCE = 150L.milliseconds
 
 data class LaunchSession(
     val activityTitle: String,
@@ -582,13 +577,8 @@ class VMActivity : BaseAppCompatActivity(), SurfaceTextureListener, SurfaceHolde
 
     override fun onPostResume() {
         super.onPostResume()
-        lifecycleScope.launch {
-            if (vmViewModel.isRunning) {
-                delay(50L.milliseconds)
-                withContext(Dispatchers.Main) {
-                    requestRefreshWindowSize(screenSize = vmViewModel.screenSize)
-                }
-            }
+        if (vmViewModel.isRunning) {
+            requestRefreshWindowSize(screenSize = vmViewModel.screenSize)
         }
     }
 
@@ -611,10 +601,12 @@ class VMActivity : BaseAppCompatActivity(), SurfaceTextureListener, SurfaceHolde
         pendingRefreshSize = screenSize
         refreshSizeJob?.cancel()
         refreshSizeJob = lifecycleScope.launch {
-            delay(RESIZE_DEBOUNCE)
+            delay(50L.milliseconds)
             val size = pendingRefreshSize ?: return@launch
             pendingRefreshSize = null
-            refreshWindowSize(screenSize = size)
+            withContext(Dispatchers.Main) {
+                refreshWindowSize(screenSize = size)
+            }
         }
     }
 
@@ -630,8 +622,6 @@ class VMActivity : BaseAppCompatActivity(), SurfaceTextureListener, SurfaceHolde
                 )
             }
         }
-        // 尺寸未变化时跳过重复应用
-        if (newSize == lastWindowSize) return newSize
         lastWindowSize = newSize
 
         applySizeToSurface?.invoke(newSize.width, newSize.height)
