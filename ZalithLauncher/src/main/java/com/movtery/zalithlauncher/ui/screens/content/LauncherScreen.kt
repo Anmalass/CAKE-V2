@@ -79,17 +79,12 @@ import com.movtery.zalithlauncher.ui.base.BaseScreen
 import com.movtery.zalithlauncher.ui.components.BackgroundCard
 import com.movtery.zalithlauncher.ui.components.MarqueeText
 import com.movtery.zalithlauncher.ui.components.ScalingActionButton
-import com.movtery.zalithlauncher.ui.components.defaultRichTextStyle
 import com.movtery.zalithlauncher.ui.screens.NestedNavKey
 import com.movtery.zalithlauncher.ui.screens.NormalNavKey
 import com.movtery.zalithlauncher.ui.screens.content.elements.AccountAvatar
 import com.movtery.zalithlauncher.ui.screens.content.elements.CommonVersionInfoLayout
 import com.movtery.zalithlauncher.ui.screens.content.elements.VersionIconImage
-import com.movtery.zalithlauncher.ui.screens.main.custom_home.MarkdownBlock
-import com.movtery.zalithlauncher.ui.screens.main.custom_home.customHomePage
 import com.movtery.zalithlauncher.utils.animation.swapAnimateDpAsState
-import com.movtery.zalithlauncher.viewmodel.HomePageState
-import com.movtery.zalithlauncher.viewmodel.LocalHomePageViewModel
 import com.movtery.zalithlauncher.viewmodel.ScreenBackStackViewModel
 
 @Composable
@@ -98,7 +93,6 @@ fun LauncherScreen(
     navigateToVersions: (Version) -> Unit,
     onLaunchGame: (Version?) -> Unit,
     onOpenLink: (String) -> Unit,
-    onHomePageEvent: (MarkdownBlock.Button.Event) -> Unit,
 ) {
     BaseScreen(
         screenKey = NormalNavKey.LauncherMain,
@@ -117,7 +111,6 @@ fun LauncherScreen(
                 ContentMenu(
                     modifier = Modifier.weight(7f),
                     isVisible = isVisible,
-                    onHomePageEvent = onHomePageEvent
                 )
             }
 
@@ -157,17 +150,12 @@ fun LauncherScreen(
 @Composable
 private fun ContentMenu(
     isVisible: Boolean,
-    onHomePageEvent: (MarkdownBlock.Button.Event) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val yOffset by swapAnimateDpAsState(
         targetValue = (-40).dp,
         swapIn = isVisible
     )
-
-    val homePageViewModel = LocalHomePageViewModel.current
-    val pageState by homePageViewModel.pageState.collectAsStateWithLifecycle()
-    val richTextStyle = defaultRichTextStyle()
 
     LazyColumn(
         modifier = modifier
@@ -203,38 +191,6 @@ private fun ContentMenu(
                         )
                     }
                 }
-            }
-        }
-
-        when (val state = pageState) {
-            is HomePageState.Blank -> {}
-            is HomePageState.Loading -> {
-                item(key = "homepage_loading_box") {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(all = 24.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            LoadingIndicator()
-                            Text(
-                                text = stringResource(R.string.settings_launcher_home_page_loading),
-                                style = MaterialTheme.typography.labelMedium,
-                            )
-                        }
-                    }
-                }
-            }
-            is HomePageState.None -> {
-                customHomePage(
-                    blocks = state.page,
-                    richTextStyle = richTextStyle,
-                    onEvent = onHomePageEvent
-                )
             }
         }
     }
