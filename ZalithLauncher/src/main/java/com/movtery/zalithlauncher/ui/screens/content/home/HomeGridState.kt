@@ -125,6 +125,9 @@ class HomeGridState internal constructor(
     /** 布局发生结算后的回调（用于持久化） */
     var onLayoutCommitted: () -> Unit = {}
 
+    /** 卡片被移除后的回调（用于同步外部与该卡片关联的数据） */
+    var onCardRemoved: (cardId: String) -> Unit = {}
+
     /** 快速空间动画（拖动中的让位） */
     internal var fastSpec: AnimationSpec<Rect> = spring(
         dampingRatio = Spring.DampingRatioLowBouncy,
@@ -247,7 +250,8 @@ class HomeGridState internal constructor(
     // ---------- 卡片管理 ----------
 
     /** 追加一张卡片 */
-    fun addCard(type: HomeCardType): HomeCard.User {
+    fun addCard(type: HomeCardType, id: String = UUID.randomUUID().toString()): HomeCard.User? {
+        if (userCards().any { it.id == id }) return null
         val lim = type.limits.clampedFor(geometry.columns)
         val width = type.defaultSpan.x.coerceIn(lim.minWidth, lim.maxWidth)
         val height = type.defaultSpan.y.coerceIn(lim.minHeight, lim.maxHeight)
@@ -257,7 +261,6 @@ class HomeGridState internal constructor(
             columns = geometry.columns,
             obstacles = userLayouts()
         )
-        val id = UUID.randomUUID().toString()
         val card = HomeCard.User(
             id = id,
             type = type,
@@ -285,6 +288,7 @@ class HomeGridState internal constructor(
             animateTo(card, effectiveLayout(card), defaultSpec)
         }
         onLayoutCommitted()
+        onCardRemoved(id)
     }
 
     // ---------- 命中测试（网格内容坐标系） ----------

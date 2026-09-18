@@ -66,14 +66,49 @@ class HomeGridEngineTest {
     // ---------- 形态分类 ----------
 
     @Test
-    fun testDeriveSizeClass() {
+    fun testDeriveSizeClassHeightBySpan() {
         val columns = 16
-        assertEquals(HomeCardSizeClass.FULL_WIDTH, deriveSizeClass(16, 4, columns))
-        assertEquals(HomeCardSizeClass.LARGE, deriveSizeClass(12, 12, columns))
-        assertEquals(HomeCardSizeClass.WIDE, deriveSizeClass(8, 4, columns))
-        assertEquals(HomeCardSizeClass.TALL, deriveSizeClass(4, 8, columns))
-        assertEquals(HomeCardSizeClass.COMPACT, deriveSizeClass(4, 4, columns))
-        assertEquals(HomeCardSizeClass.SQUARE, deriveSizeClass(10, 10, columns))
+        //高度：≤4 拥挤、=5 小、6..7 中、8..9 大、≥10 超大
+        assertEquals(HomeCardSizeClass.COMPACT, deriveSizeClass(10, 2, columns).height)
+        assertEquals(HomeCardSizeClass.COMPACT, deriveSizeClass(10, 4, columns).height)
+        assertEquals(HomeCardSizeClass.SMALL, deriveSizeClass(10, 5, columns).height)
+        assertEquals(HomeCardSizeClass.MEDIUM, deriveSizeClass(10, 6, columns).height)
+        assertEquals(HomeCardSizeClass.MEDIUM, deriveSizeClass(10, 7, columns).height)
+        assertEquals(HomeCardSizeClass.LARGE, deriveSizeClass(10, 8, columns).height)
+        assertEquals(HomeCardSizeClass.LARGE, deriveSizeClass(10, 9, columns).height)
+        assertEquals(HomeCardSizeClass.EXTRA_LARGE, deriveSizeClass(10, 10, columns).height)
+        assertEquals(HomeCardSizeClass.EXTRA_LARGE, deriveSizeClass(10, 20, columns).height)
+    }
+
+    @Test
+    fun testDeriveSizeClassWidthByFraction() {
+        val columns = 16
+        //宽度按占网格宽度的比例划分：每档覆盖 16/5 列
+        assertEquals(HomeCardSizeClass.COMPACT, deriveSizeClass(3, 8, columns).width)
+        assertEquals(HomeCardSizeClass.SMALL, deriveSizeClass(4, 8, columns).width)
+        assertEquals(HomeCardSizeClass.SMALL, deriveSizeClass(6, 8, columns).width)
+        assertEquals(HomeCardSizeClass.MEDIUM, deriveSizeClass(7, 8, columns).width)
+        assertEquals(HomeCardSizeClass.LARGE, deriveSizeClass(10, 8, columns).width)
+        assertEquals(HomeCardSizeClass.LARGE, deriveSizeClass(12, 8, columns).width)
+        //占比 ≥ 4/5 即为最高档
+        assertEquals(HomeCardSizeClass.EXTRA_LARGE, deriveSizeClass(13, 8, columns).width)
+        //占满整行即为最高档
+        assertEquals(HomeCardSizeClass.EXTRA_LARGE, deriveSizeClass(16, 8, columns).width)
+        //高度仍按绝对跨度划分
+        assertEquals(HomeCardSizeClass.MEDIUM, deriveSizeClass(16, 7, columns).height)
+    }
+
+    @Test
+    fun testDeriveSizeClassDimensionsIndependent() {
+        val columns = 16
+        //宽度与高度独立分级，互不影响
+        val size = deriveSizeClass(width = 3, height = 10, columns = columns)
+        assertEquals(HomeCardSizeClass.COMPACT, size.width)
+        assertEquals(HomeCardSizeClass.EXTRA_LARGE, size.height)
+
+        val square = deriveSizeClass(width = 7, height = 7, columns = columns)
+        assertEquals(HomeCardSizeClass.MEDIUM, square.width)
+        assertEquals(HomeCardSizeClass.MEDIUM, square.height)
     }
 
     // ---------- 最近空位搜索 ----------

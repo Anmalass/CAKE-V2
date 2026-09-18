@@ -48,6 +48,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -83,7 +84,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.movtery.zalithlauncher.R
+import com.movtery.zalithlauncher.ui.screens.content.home.version.VersionCardManager
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.roundToInt
@@ -205,6 +210,35 @@ fun HomeGrid(
                 columns = state.geometry.columns
             )
         }
+    }
+
+    // 卡片移除回调：同步版本卡片记录
+    LaunchedEffect(Unit) {
+        state.onCardRemoved = { cardId ->
+            VersionCardManager.removeCard(cardId)
+        }
+    }
+
+    // 与版本卡片记录保持同步：记录存在而网格缺卡时补齐
+    LaunchedEffect(Unit) {
+        VersionCardManager.cards.collect { states ->
+            states.forEach { cardState ->
+                if (state.userCards().none { it.id == cardState.record.cardId }) {
+                    state.addCard(HomeCards.versionCardType(), cardState.record.cardId)
+                }
+            }
+        }
+    }
+
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                VersionCardManager.recheck()
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
     }
 
     var viewportTop by remember { mutableFloatStateOf(0f) }
@@ -499,7 +533,7 @@ private fun HomeCardSlot(
             shape = card.type.shape ?: MaterialTheme.shapes.extraLarge,
             selected = adjusting
         ) {
-            card.type.content(state.cardStateOf(card))
+            card.type.content(state.cardStateOf(card), card.id)
         }
 
         if (adjusting) {

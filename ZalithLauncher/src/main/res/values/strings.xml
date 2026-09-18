@@ -648,6 +648,9 @@
     <string name="versions_manage_pin">Pin</string>
     <string name="versions_manage_install_exists">Version name already exists!</string>
     <string name="versions_manage_invalid">Invalid version</string>
+    <string name="home_add_version_card">Add card to Home screen</string>
+    <string name="home_version_card_deleted">Version deleted</string>
+    <string name="home_version_card_inaccessible">Game directory inaccessible</string>
     <string name="versions_manage_rename_version">Rename Version</string>
     <string name="versions_manage_copy_version">Copy Version</string>
     <string name="versions_manage_copy_version_tip">Copy the current version as a new version, with version isolation enabled by default. Check "Copy All Files" below to also include all generated files (resource packs, saves, game settings, etc.).</string>

@@ -27,18 +27,39 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.movtery.zalithlauncher.BuildConfig
 import com.movtery.zalithlauncher.BuildKeys
 import com.movtery.zalithlauncher.R
 import com.movtery.zalithlauncher.ui.components.BackgroundCard
+import com.movtery.zalithlauncher.ui.screens.content.home.version.VersionCardContent
 
 /**
  * 主页卡片注册表
  */
 object HomeCards {
+    /** 版本卡片的类型 id */
+    const val VERSION_CARD_TYPE_ID = "version_card"
+
+    private val versionCardType = HomeCardType(
+        typeId = VERSION_CARD_TYPE_ID,
+        defaultSpan = IntOffset(10, 6),
+        limits = CardLimits(
+            minWidth = 10,
+            minHeight = 4,
+            maxHeight = 12
+        ),
+        content = { cardId ->
+            VersionCardContent(cardId)
+        }
+    )
+
+    /** 版本卡片类型 */
+    fun versionCardType(): HomeCardType = versionCardType
+
     /** 用户卡片类型注册表 */
-    val userCardTypes: List<HomeCardType> = emptyList()
+    val userCardTypes: List<HomeCardType> = listOf(versionCardType)
 
     /** 系统卡片（不可变更） */
     fun systemCards(): List<HomeCard.System> = buildList {

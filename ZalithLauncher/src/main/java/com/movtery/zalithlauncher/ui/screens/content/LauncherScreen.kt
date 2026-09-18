@@ -81,6 +81,8 @@ import com.movtery.zalithlauncher.ui.screens.content.elements.CommonVersionInfoL
 import com.movtery.zalithlauncher.ui.screens.content.elements.VersionIconImage
 import com.movtery.zalithlauncher.ui.screens.content.home.HomeGrid
 import com.movtery.zalithlauncher.ui.screens.content.home.rememberHomeGridState
+import com.movtery.zalithlauncher.ui.screens.content.home.version.LocalHomeCardLauncher
+import com.movtery.zalithlauncher.ui.screens.content.home.version.LocalHomeCardVersionSettings
 import com.movtery.zalithlauncher.utils.animation.swapAnimateDpAsState
 import com.movtery.zalithlauncher.viewmodel.ScreenBackStackViewModel
 
@@ -108,6 +110,10 @@ fun LauncherScreen(
                 ContentMenu(
                     modifier = Modifier.weight(7f),
                     isVisible = isVisible,
+                    onLaunchGame = { version ->
+                        onLaunchGame(version)
+                    },
+                    onOpenVersionSettings = navigateToVersions
                 )
             }
 
@@ -146,6 +152,8 @@ fun LauncherScreen(
 @Composable
 private fun ContentMenu(
     isVisible: Boolean,
+    onLaunchGame: (Version) -> Unit,
+    onOpenVersionSettings: (Version) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val yOffset by swapAnimateDpAsState(
@@ -154,12 +162,17 @@ private fun ContentMenu(
     )
     val gridState = rememberHomeGridState()
 
-    HomeGrid(
-        state = gridState,
-        modifier = modifier
-            .fillMaxSize()
-            .offset { IntOffset(x = 0, y = yOffset.roundToPx()) }
-    )
+    CompositionLocalProvider(
+        LocalHomeCardLauncher provides onLaunchGame,
+        LocalHomeCardVersionSettings provides onOpenVersionSettings
+    ) {
+        HomeGrid(
+            state = gridState,
+            modifier = modifier
+                .fillMaxSize()
+                .offset { IntOffset(x = 0, y = yOffset.roundToPx()) }
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

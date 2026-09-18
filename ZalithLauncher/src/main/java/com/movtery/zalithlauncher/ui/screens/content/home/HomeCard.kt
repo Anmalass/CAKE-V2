@@ -75,19 +75,17 @@ class HomeCardState(
     val interaction: HomeCardInteraction
 ) {
     /** 依据跨度推导的形态分类 */
-    val sizeClass: HomeCardSizeClass = deriveSizeClass(spanWidth, spanHeight, columns)
-    /** 卡片是否占据整行宽度 */
-    val isFullWidth: Boolean = spanWidth >= columns
+    val sizeClass: HomeCardSize = deriveSizeClass(spanWidth, spanHeight, columns)
 }
 
-typealias HomeCardContent = @Composable HomeCardState.() -> Unit
+typealias HomeCardContent = @Composable HomeCardState.(cardId: String) -> Unit
 
 /**
  * 用户卡片的类型声明，未声明时使用主题默认形状。
  * @param defaultSpan 默认跨度
  * @param limits 尺寸边界限制
  * @param shape 形状
- * @param content 该卡片的 UI 内容
+ * @param content 该卡片的 UI 内容，参数为卡片自身 id
  */
 class HomeCardType(
     val typeId: String,

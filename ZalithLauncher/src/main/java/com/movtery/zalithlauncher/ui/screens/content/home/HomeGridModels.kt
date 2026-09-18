@@ -119,20 +119,51 @@ fun computeGridGeometry(
     return GridGeometry(columns = evenColumns, cellSize = widthDp / evenColumns)
 }
 
-/** 卡片依据自身跨度推导出的形态分类，供卡片内容按形态切换显示 */
-enum class HomeCardSizeClass { COMPACT, SQUARE, WIDE, TALL, LARGE, FULL_WIDTH }
-
 /**
- * 由卡片跨度与网格列数推导形态分类。
- * 优先级：整行 > 大面积 > 宽 > 高 > 紧凑 > 方形。
+ * 卡片依据自身跨度推导出的形态分类，供卡片内容按形态切换显示
+ * 高度档位按跨度（格）的绝对数值划分
  */
-fun deriveSizeClass(width: Int, height: Int, columns: Int): HomeCardSizeClass {
-    return when {
-        width >= columns -> HomeCardSizeClass.FULL_WIDTH
-        width >= columns * 0.75f && height >= columns * 0.75f -> HomeCardSizeClass.LARGE
-        width > height * 1.25f -> HomeCardSizeClass.WIDE
-        height > width * 1.25f -> HomeCardSizeClass.TALL
-        width <= columns * 0.5f -> HomeCardSizeClass.COMPACT
-        else -> HomeCardSizeClass.SQUARE
+enum class HomeCardSizeClass(val maxSpan: Int) {
+    COMPACT(4),
+    SMALL(5),
+    MEDIUM(7),
+    LARGE(9),
+    EXTRA_LARGE(Int.MAX_VALUE);
+
+    companion object {
+        /**
+         * 依据高度跨度（格）推导所处档位
+         */
+        fun fromSpan(span: Int): HomeCardSizeClass =
+            entries.first { span <= it.maxSpan }
+
+        /**
+         * 依据宽度占网格宽度的比例推导所处档位
+         */
+        fun fromFraction(width: Int, columns: Int): HomeCardSizeClass {
+            val classes = entries
+            if (columns <= 0 || width <= 0) return COMPACT
+            val fraction = width / columns.toFloat()
+            val index = (fraction * classes.size).toInt().coerceIn(0, classes.lastIndex)
+            return classes[index]
+        }
     }
 }
+
+/** 卡片形态记录 */
+data class HomeCardSize(
+    val width: HomeCardSizeClass,
+    val height: HomeCardSizeClass
+)
+
+/**
+ * 由卡片跨度推导宽、高各自所处的形态档位
+ */
+fun deriveSizeClass(
+    width: Int,
+    height: Int,
+    columns: Int
+): HomeCardSize = HomeCardSize(
+    width = HomeCardSizeClass.fromFraction(width, columns),
+    height = HomeCardSizeClass.fromSpan(height)
+)
