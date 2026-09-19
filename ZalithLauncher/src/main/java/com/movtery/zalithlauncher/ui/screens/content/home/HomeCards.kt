@@ -23,17 +23,23 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.movtery.cardgrid.model.CardLimits
+import com.movtery.cardgrid.model.CardType
 import com.movtery.zalithlauncher.BuildConfig
 import com.movtery.zalithlauncher.BuildKeys
 import com.movtery.zalithlauncher.R
 import com.movtery.zalithlauncher.ui.components.BackgroundCard
 import com.movtery.zalithlauncher.ui.screens.content.home.version.VersionCardContent
+
+/** 系统卡片（不可变更），由启动器自行提供并绘制在网格之外 */
+class SystemCard(val id: String, val content: @Composable () -> Unit)
 
 /**
  * 主页卡片注册表
@@ -42,7 +48,7 @@ object HomeCards {
     /** 版本卡片的类型 id */
     const val VERSION_CARD_TYPE_ID = "version_card"
 
-    private val versionCardType = HomeCardType(
+    private val versionCardType = CardType(
         typeId = VERSION_CARD_TYPE_ID,
         defaultSpan = IntOffset(10, 6),
         limits = CardLimits(
@@ -56,13 +62,13 @@ object HomeCards {
     )
 
     /** 版本卡片类型 */
-    fun versionCardType(): HomeCardType = versionCardType
+    fun versionCardType(): CardType = versionCardType
 
     /** 用户卡片类型注册表 */
-    val userCardTypes: List<HomeCardType> = listOf(versionCardType)
+    val userCardTypes: List<CardType> = listOf(versionCardType)
 
     /** 系统卡片（不可变更） */
-    fun systemCards(): List<HomeCard.System> = buildList {
+    fun systemCards(): List<SystemCard> = buildList {
         if (BuildConfig.DEBUG) {
             add(debugWarningCard())
         }
@@ -71,7 +77,7 @@ object HomeCards {
     /**
      * debug版本关不掉的警告，防止有人把测试版当正式版用 XD
      */
-    private fun debugWarningCard() = HomeCard.System(id = "system_debug_warning") {
+    private fun debugWarningCard() = SystemCard(id = "system_debug_warning") {
         BackgroundCard(shape = MaterialTheme.shapes.extraLarge) {
             Column(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),

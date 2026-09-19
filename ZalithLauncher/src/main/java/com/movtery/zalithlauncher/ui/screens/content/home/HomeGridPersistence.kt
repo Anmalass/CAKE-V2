@@ -19,6 +19,7 @@
 package com.movtery.zalithlauncher.ui.screens.content.home
 
 import com.google.gson.Gson
+import com.movtery.cardgrid.state.GridCard
 import com.tencent.mmkv.MMKV
 
 /** 单张卡片的持久化数据 */
@@ -60,10 +61,10 @@ object HomeGridStore {
     }
 
     /** 保存布局快照（仅用户卡片参与持久化） */
-    fun save(cards: List<HomeCard>, columns: Int) {
+    fun save(cards: List<GridCard>, columns: Int) {
         val snapshot = HomeGridSnapshot(
             columns = columns,
-            cards = cards.filterIsInstance<HomeCard.User>().map { card ->
+            cards = cards.map { card ->
                 HomeCardSnapshot(
                     id = card.id,
                     type = card.type.typeId,

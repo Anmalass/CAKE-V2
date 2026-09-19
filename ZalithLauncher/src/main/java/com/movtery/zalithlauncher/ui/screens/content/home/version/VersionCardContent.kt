@@ -53,14 +53,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.movtery.cardgrid.model.CardInteraction
+import com.movtery.cardgrid.model.CardSize
+import com.movtery.cardgrid.model.CardSizeClass
+import com.movtery.cardgrid.model.CardState
 import com.movtery.zalithlauncher.R
 import com.movtery.zalithlauncher.game.version.installed.Version
 import com.movtery.zalithlauncher.ui.components.LittleTextLabel
 import com.movtery.zalithlauncher.ui.screens.content.elements.VersionIconImage
-import com.movtery.zalithlauncher.ui.screens.content.home.HomeCardInteraction
-import com.movtery.zalithlauncher.ui.screens.content.home.HomeCardSize
-import com.movtery.zalithlauncher.ui.screens.content.home.HomeCardSizeClass
-import com.movtery.zalithlauncher.ui.screens.content.home.HomeCardState
 
 /** 版本卡片启动回调 */
 val LocalHomeCardLauncher = staticCompositionLocalOf<(Version) -> Unit> { {} }
@@ -72,7 +72,7 @@ val LocalHomeCardVersionSettings = staticCompositionLocalOf<(Version) -> Unit> {
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun HomeCardState.VersionCardContent(cardId: String) {
+fun CardState.VersionCardContent(cardId: String) {
     val states by VersionCardManager.cards.collectAsStateWithLifecycle()
     val card = remember(states, cardId) {
         states.firstOrNull { it.record.cardId == cardId }
@@ -85,37 +85,37 @@ fun HomeCardState.VersionCardContent(cardId: String) {
     val currentInteraction by rememberUpdatedState(interaction)
 
     //文本显示门槛
-    val showSummary = sizeClass.height >= HomeCardSizeClass.LARGE
-    val showDetails = sizeClass.height >= HomeCardSizeClass.MEDIUM
+    val showSummary = sizeClass.height >= CardSizeClass.LARGE
+    val showDetails = sizeClass.height >= CardSizeClass.MEDIUM
     val iconSize = iconSizeFor(sizeClass)
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .homeCardTap {
-                if (currentInteraction == HomeCardInteraction.Idle) {
+                if (currentInteraction == CardInteraction.Idle) {
                     currentVersion?.let(onOpenSettings)
                 }
             }
             .padding(12.dp)
     ) {
         when {
-            sizeClass.width >= HomeCardSizeClass.MEDIUM &&
-                    sizeClass.height >= HomeCardSizeClass.LARGE -> HeroContent(
+            sizeClass.width >= CardSizeClass.MEDIUM &&
+                    sizeClass.height >= CardSizeClass.LARGE -> HeroContent(
                 card = card,
                 version = version,
                 iconSize = enlargedIconSize(sizeClass.width),
                 showSummary = showSummary,
                 showDetails = showDetails
             )
-            sizeClass.width <= HomeCardSizeClass.SMALL -> NarrowContent(
+            sizeClass.width <= CardSizeClass.SMALL -> NarrowContent(
                 card = card,
                 version = version,
                 iconSize = iconSize,
                 headerIconSize = enlargedIconSize(sizeClass.height),
                 showSummary = showSummary,
                 showDetails = showDetails,
-                tall = sizeClass.height > HomeCardSizeClass.SMALL,
+                tall = sizeClass.height > CardSizeClass.SMALL,
             )
             else -> WideContent(
                 card = card,
@@ -123,25 +123,25 @@ fun HomeCardState.VersionCardContent(cardId: String) {
                 iconSize = iconSize,
                 showSummary = showSummary,
                 showDetails = showDetails,
-                textButton = sizeClass.width >= HomeCardSizeClass.LARGE
+                textButton = sizeClass.width >= CardSizeClass.LARGE
             )
         }
     }
 }
 
-private fun iconSizeFor(sizeClass: HomeCardSize): Dp {
-    val cramped = sizeClass.height == HomeCardSizeClass.COMPACT
+private fun iconSizeFor(sizeClass: CardSize): Dp {
+    val cramped = sizeClass.height == CardSizeClass.COMPACT
     return when (sizeClass.width) {
-        HomeCardSizeClass.EXTRA_LARGE,
-        HomeCardSizeClass.LARGE -> if (cramped) 32.dp else 44.dp
-        HomeCardSizeClass.MEDIUM -> if (cramped) 28.dp else 36.dp
+        CardSizeClass.EXTRA_LARGE,
+        CardSizeClass.LARGE -> if (cramped) 32.dp else 44.dp
+        CardSizeClass.MEDIUM -> if (cramped) 28.dp else 36.dp
         else -> if (cramped) 24.dp else 28.dp
     }
 }
 
-private fun enlargedIconSize(sizeClass: HomeCardSizeClass): Dp = when (sizeClass) {
-    HomeCardSizeClass.MEDIUM -> 48.dp
-    HomeCardSizeClass.LARGE -> 56.dp
+private fun enlargedIconSize(sizeClass: CardSizeClass): Dp = when (sizeClass) {
+    CardSizeClass.MEDIUM -> 48.dp
+    CardSizeClass.LARGE -> 56.dp
     else -> 64.dp
 }
 

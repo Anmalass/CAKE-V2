@@ -16,11 +16,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/gpl-3.0.txt>.
  */
 
-package com.movtery.zalithlauncher.ui.screens.content.home
+package com.movtery.cardgrid.engine
 
 import androidx.compose.ui.unit.IntOffset
+import com.movtery.cardgrid.model.CardLimits
+import com.movtery.cardgrid.model.CardRect
+import com.movtery.cardgrid.model.ResizeEdge
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Random
@@ -30,7 +34,7 @@ import java.util.Random
  * 耗时断言采用宽松预算，仅拦截复杂度退化（意外的指数级或死循环），
  * 真实耗时通过标准输出记录。
  */
-class HomeGridEnginePerfTest {
+class GridEnginePerfTest {
 
     private fun card(
         id: String,
@@ -38,24 +42,24 @@ class HomeGridEnginePerfTest {
         y: Int,
         width: Int,
         height: Int
-    ) = CardLayout(id = id, x = x, y = y, width = width, height = height)
+    ) = CardRect(id = id, x = x, y = y, width = width, height = height)
 
     /** 用引擎自身的贪心打包生成一张填满的网格，模拟重度自定义的用户主页 */
-    private fun generateGrid(count: Int, columns: Int, seed: Long): List<CardLayout> {
+    private fun generateGrid(count: Int, columns: Int, seed: Long): List<CardRect> {
         val random = Random(seed)
-        val placed = mutableListOf<CardLayout>()
+        val placed = mutableListOf<CardRect>()
         for (index in 0 until count) {
             val width = (2 + random.nextInt(5)) * 2
             val height = (2 + random.nextInt(5)) * 2
-            val slot = HomeGridEngine.findTopLeftFreeSlot(width, height, columns, placed)
+            val slot = GridEngine.findTopLeftFreeSlot(width, height, columns, placed)
             placed.add(card("card$index", slot.x, slot.y, width, height))
         }
-        assertTrue(HomeGridEngine.validate(placed, columns).size == count)
+        assertTrue(GridEngine.validate(placed, columns).size == count)
         return placed
     }
 
-    private fun assertNoOverlap(all: List<CardLayout>) {
-        assertFalse("Cards must not overlap at stress scale", HomeGridEngine.hasOverlap(all))
+    private fun assertNoOverlap(all: List<CardRect>) {
+        assertFalse("Cards must not overlap at stress scale", GridEngine.hasOverlap(all))
     }
 
     private inline fun measureMs(block: () -> Unit): Long {
@@ -67,7 +71,7 @@ class HomeGridEnginePerfTest {
     // ---------- 拖动热路径 ----------
 
     @Test
-    fun testResolveDisplacementsUnderLongDragPath() {
+    fun testResolveDragUnderLongDragPath() {
         val columns = 16
         // 80 张卡 ≈ 2400+ 单元格，网格纵深约百行，远超正常使用规模
         val cards = generateGrid(count = 80, columns = columns, seed = 42L)
@@ -76,28 +80,58 @@ class HomeGridEnginePerfTest {
 
         // 预热 JIT
         repeat(50) {
-            HomeGridEngine.resolveDisplacements(mover, columns, others)
+            GridEngine.resolveDrag(mover, IntOffset(mover.x, mover.y), columns, others)
         }
 
         // 模拟一次贯穿整张网格的拖动：从左上到右下逐步换格
         val steps = 300
-        val maxY = HomeGridEngine.totalRows(cards)
+        val maxY = GridEngine.totalRows(cards)
         val warm = measureMs {
             for (step in 0 until steps) {
                 val t = step / steps.toFloat()
-                val preview = mover.copy(
-                    x = ((columns - mover.width) * t).toInt(),
-                    y = ((maxY - mover.height) * t).toInt()
+                val target = IntOffset(
+                    ((columns - mover.width) * t).toInt(),
+                    ((maxY - mover.height) * t).toInt()
                 )
-                val displaced = HomeGridEngine.resolveDisplacements(preview, columns, others)
-                val relocated = others.map { displaced[it.id] ?: it }
-                assertNoOverlap(relocated + preview)
+                val result = GridEngine.resolveDrag(mover, target, columns, others)
+                val relocated = others.map { result.pushed[it.id] ?: it }
+                assertNoOverlap(relocated + result.layout)
             }
         }
         val perCallMs = warm.toDouble() / steps
-        println("resolveDisplacements: ${warm}ms / $steps steps = ${"%.3f".format(perCallMs)}ms per call (80 cards, 16 cols)")
+        println("resolveDrag: ${warm}ms / $steps steps = ${"%.3f".format(perCallMs)}ms per call (80 cards, 16 cols)")
         // 宽松预算：单次结算在桌面 JVM 上应远低于 10ms
-        assertTrue("resolveDisplacements took too long: $perCallMs ms", perCallMs < 10.0)
+        assertTrue("resolveDrag took too long: $perCallMs ms", perCallMs < 10.0)
+    }
+
+    // ---------- 缩放热路径 ----------
+
+    @Test
+    fun testResolveResizeUnderDenseGrid() {
+        val columns = 16
+        val cards = generateGrid(count = 80, columns = columns, seed = 13L)
+        val mover = cards[0]
+        val others = cards.filter { it.id != mover.id }
+
+        repeat(50) {
+            GridEngine.resolveResize(mover, ResizeEdge.End, IntOffset(columns, 0), columns, CardLimits.DEFAULT, others)
+        }
+
+        val steps = 200
+        val elapsed = measureMs {
+            for (step in 0 until steps) {
+                val span = 4 + (step % (columns - 4))
+                val result = GridEngine.resolveResize(
+                    mover, ResizeEdge.End, IntOffset(mover.x + span, mover.y),
+                    columns, CardLimits.DEFAULT, others
+                )
+                val relocated = others.map { result.pushed[it.id] ?: it }
+                assertNoOverlap(relocated + result.layout)
+            }
+        }
+        val perCallMs = elapsed.toDouble() / steps
+        println("resolveResize: ${elapsed}ms / $steps steps = ${"%.3f".format(perCallMs)}ms per call (80 cards, 16 cols)")
+        assertTrue("resolveResize took too long: $perCallMs ms", perCallMs < 10.0)
     }
 
     @Test
@@ -106,13 +140,13 @@ class HomeGridEnginePerfTest {
         val cards = generateGrid(count = 80, columns = columns, seed = 7L)
         // 预热
         repeat(50) {
-            HomeGridEngine.findNearestFreeSlot(8, 8, IntOffset(columns / 2, HomeGridEngine.totalRows(cards) / 2), columns, cards)
+            GridEngine.findNearestFreeSlot(8, 8, IntOffset(columns / 2, GridEngine.totalRows(cards) / 2), columns, cards)
         }
-        val rows = HomeGridEngine.totalRows(cards)
+        val rows = GridEngine.totalRows(cards)
         val elapsed = measureMs {
             repeat(1000) {
-                val slot = HomeGridEngine.findNearestFreeSlot(8, 8, IntOffset(columns / 2, rows / 2), columns, cards)
-                assertTrue("A free slot must exist in a dense grid", slot != null)
+                val slot = GridEngine.findNearestFreeSlot(8, 8, IntOffset(columns / 2, rows / 2), columns, cards)
+                assertNotNull("A free slot must exist in a dense grid", slot)
             }
         }
         println("findNearestFreeSlot: ${elapsed}ms / 1000 calls = ${"%.3f".format(elapsed / 1000.0)}ms per call (dense 16x$rows)")
@@ -137,14 +171,14 @@ class HomeGridEnginePerfTest {
         }
         val elapsed = measureMs {
             repeat(100) {
-                HomeGridEngine.validate(dirty, columns)
+                GridEngine.validate(dirty, columns)
             }
         }
-        val result = HomeGridEngine.validate(dirty, columns)
+        val result = GridEngine.validate(dirty, columns)
         assertEquals("Duplicate ids must be dropped", 100, result.size)
         assertNoOverlap(result)
-        assertTrue(result.all { HomeGridEngine.isInGrid(it, columns) })
-        assertTrue("Validation result must be compacted", result == HomeGridEngine.compact(result))
+        assertTrue(result.all { GridEngine.isInGrid(it, columns) })
+        assertTrue("Validation result must be compacted", result == GridEngine.compact(result))
         println("validate: ${elapsed}ms / 100 calls = ${"%.3f".format(elapsed / 100.0)}ms per call (120 dirty cards)")
         assertTrue("validate took too long: ${elapsed / 100.0} ms", elapsed / 100.0 < 50.0)
     }
@@ -152,16 +186,16 @@ class HomeGridEnginePerfTest {
     @Test
     fun testReflowOnLargeGrid() {
         val cards = generateGrid(count = 100, columns = 16, seed = 5L)
-        val limits: (CardLayout) -> CardLimits = { CardLimits.DEFAULT }
+        val limits: (CardRect) -> CardLimits = { CardLimits.DEFAULT }
         val elapsed = measureMs {
             repeat(200) {
-                val result = HomeGridEngine.reflow(cards, oldColumns = 16, columns = 24, limits = limits)
+                val result = GridEngine.reflow(cards, oldColumns = 16, columns = 24, limits = limits)
                 assertEquals(100, result.size)
-                assertTrue(result.all { HomeGridEngine.isInGrid(it, 24) })
+                assertTrue(result.all { GridEngine.isInGrid(it, 24) })
                 assertNoOverlap(result)
 
-                val back = HomeGridEngine.reflow(result, oldColumns = 24, columns = 16, limits = limits)
-                assertTrue(back.all { HomeGridEngine.isInGrid(it, 16) })
+                val back = GridEngine.reflow(result, oldColumns = 24, columns = 16, limits = limits)
+                assertTrue(back.all { GridEngine.isInGrid(it, 16) })
                 assertNoOverlap(back)
             }
         }
@@ -174,8 +208,8 @@ class HomeGridEnginePerfTest {
         val cards = generateGrid(count = 80, columns = 16, seed = 11L)
         val elapsed = measureMs {
             repeat(1000) {
-                val once = HomeGridEngine.compact(cards)
-                val twice = HomeGridEngine.compact(once)
+                val once = GridEngine.compact(cards)
+                val twice = GridEngine.compact(once)
                 assertEquals("compact must be idempotent", once, twice)
             }
         }
