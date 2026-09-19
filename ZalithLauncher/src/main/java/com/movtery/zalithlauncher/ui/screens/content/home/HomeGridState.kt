@@ -396,8 +396,19 @@ class HomeGridState internal constructor(
         val edge = (current.mode as? AdjustSession.Mode.Resize)?.edge ?: return
         pointerAnchorInRoot = areaOffsetInRoot + pointer
         pointerPosition = pointer
-        dragRawRect = rawRectForResize(current.card, edge, pointer)
-        applyPreview(resizeLayout(current.card, current.card.layout, edge, pointer))
+        val result = HomeGridEngine.resizeWithPush(
+            current = current.card.layout,
+            edge = edge,
+            pointer = IntOffset(
+                (pointer.x / cellPx).roundToInt(),
+                (pointer.y / cellPx).roundToInt()
+            ),
+            columns = geometry.columns,
+            limits = current.card.type.limits,
+            obstacles = userLayouts().filterNot { it.id == current.card.id }
+        )
+        dragRawRect = rawRectForResize(current.card, edge, pointer, result.layout)
+        applyPreview(result.layout, result.pushed)
     }
 
     fun onResizeEnd() {
@@ -501,11 +512,11 @@ class HomeGridState internal constructor(
     private fun previewLayoutOf(session: AdjustSession): CardLayout =
         dragPreview ?: session.card.layout
 
-    /** 应用新的吸附预览：结算挤压让位并动画过渡受影响的卡片 */
-    private fun applyPreview(preview: CardLayout) {
+    /** 应用新的吸附预览：结算挤压让位并动画过渡受影响的卡片，缩放会话直接传入推挤结果 */
+    private fun applyPreview(preview: CardLayout, pushed: Map<String, CardLayout>? = null) {
         if (dragPreview == preview) return
         dragPreview = preview
-        val newDisplaced = HomeGridEngine.resolveDisplacements(
+        val newDisplaced = pushed ?: HomeGridEngine.resolveDisplacements(
             moving = preview,
             columns = geometry.columns,
             cards = userLayouts()
@@ -598,41 +609,26 @@ class HomeGridState internal constructor(
         return card.layout.copy(x = x, y = y)
     }
 
-    /** 依据指针位置计算碰壁式缩放的吸附布局，锚定对侧边缘 */
-    private fun resizeLayout(
+    /** 依据指针位置计算缩放时跟手的原始矩形，被拖动边钳制在最小跨度与推挤结算的跨度之间 */
+    private fun rawRectForResize(
         card: HomeCard.User,
-        layout: CardLayout,
         edge: HomeResizeEdge,
-        pointer: Offset
-    ): CardLayout {
-        return HomeGridEngine.resizeWithWalls(
-            current = layout,
-            edge = edge,
-            pointer = IntOffset(
-                (pointer.x / cellPx).roundToInt(),
-                (pointer.y / cellPx).roundToInt()
-            ),
-            columns = geometry.columns,
-            limits = card.type.limits,
-            obstacles = userLayouts().filterNot { it.id == card.id }
-        )
-    }
-
-    /** 依据指针位置计算缩放时跟手的原始矩形，被拖动边钳制在碰壁界内 */
-    private fun rawRectForResize(card: HomeCard.User, edge: HomeResizeEdge, pointer: Offset): Rect {
+        pointer: Offset,
+        settled: CardLayout
+    ): Rect {
         val layout = card.layout
-        val range = HomeGridEngine.resizeWall(
-            current = layout,
-            edge = edge,
-            columns = geometry.columns,
-            limits = card.type.limits,
-            obstacles = userLayouts().filterNot { it.id == card.id }
-        )
+        val lim = card.type.limits.clampedFor(geometry.columns)
+        val minSpan = if (edge == HomeResizeEdge.Start || edge == HomeResizeEdge.End) lim.minWidth else lim.minHeight
+        val maxSpan = when (edge) {
+            HomeResizeEdge.Start, HomeResizeEdge.End -> settled.width
+            HomeResizeEdge.Top, HomeResizeEdge.Bottom -> settled.height
+        }
+        val range = minSpan..maxSpan
         val left = layout.x * cellPx + cardInsetPx
         val top = layout.y * cellPx + cardInsetPx
         val right = layout.right * cellPx - cardInsetPx
         val bottom = layout.bottom * cellPx - cardInsetPx
-        // 各跨度对应的被拖动边像素位置，跟手矩形与吸附布局共用同一堵墙
+        // 各跨度对应的被拖动边像素位置
         fun edgePxStart(span: Int) = (layout.right - span) * cellPx + cardInsetPx
         fun edgePxTop(span: Int) = (layout.bottom - span) * cellPx + cardInsetPx
         fun edgePxEnd(span: Int) = (layout.x + span) * cellPx - cardInsetPx

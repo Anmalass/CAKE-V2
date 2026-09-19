@@ -331,6 +331,106 @@ class HomeGridEngineTest {
         assertEquals(card("A", 0, 0, 6, 8), partialResult)
     }
 
+    // ---------- 推挤式缩放 ----------
+
+    @Test
+    fun testResizeEndPushesOverlappedCard() {
+        // 扩张压到 B：B 被推至与前沿齐平，直到 B 贴合网格右缘、推不动为止
+        val a = card("A", 0, 0, 4, 4)
+        val obstacles = listOf(card("B", 4, 0, 8, 4))
+        val result = HomeGridEngine.resizeWithPush(a, HomeResizeEdge.End, IntOffset(16, 0), 16, CardLimits.DEFAULT, obstacles)
+        assertEquals(card("A", 0, 0, 8, 4), result.layout)
+        assertEquals(mapOf("B" to card("B", 8, 0, 8, 4)), result.pushed)
+    }
+
+    @Test
+    fun testResizeEndBlockedWhenSideFull() {
+        // B 占满 A 右侧并贴合网格右缘：完全推不动，跨度止步于原位
+        val a = card("A", 0, 0, 4, 4)
+        val obstacles = listOf(card("B", 4, 0, 12, 4))
+        val result = HomeGridEngine.resizeWithPush(a, HomeResizeEdge.End, IntOffset(16, 0), 16, CardLimits.DEFAULT, obstacles)
+        assertEquals(card("A", 0, 0, 4, 4), result.layout)
+        assertTrue(result.pushed.isEmpty())
+    }
+
+    @Test
+    fun testResizePushesChainOfCards() {
+        // 推箱链条：B 被推开后联动顶开 C，直到 C 贴合网格右缘
+        val a = card("A", 0, 0, 4, 4)
+        val obstacles = listOf(
+            card("B", 4, 0, 4, 4),
+            card("C", 8, 0, 4, 4)
+        )
+        val result = HomeGridEngine.resizeWithPush(a, HomeResizeEdge.End, IntOffset(10, 0), 16, CardLimits.DEFAULT, obstacles)
+        assertEquals(card("A", 0, 0, 8, 4), result.layout)
+        assertEquals(
+            mapOf(
+                "B" to card("B", 8, 0, 4, 4),
+                "C" to card("C", 12, 0, 4, 4)
+            ),
+            result.pushed
+        )
+    }
+
+    @Test
+    fun testResizeStartPushesOverlappedCard() {
+        // 左缘扩张：B 被推向网格左缘
+        val a = card("A", 4, 0, 4, 4)
+        val obstacles = listOf(card("B", 2, 0, 2, 4))
+        val result = HomeGridEngine.resizeWithPush(a, HomeResizeEdge.Start, IntOffset(0, 0), 16, CardLimits.DEFAULT, obstacles)
+        assertEquals(card("A", 2, 0, 6, 4), result.layout)
+        assertEquals(mapOf("B" to card("B", 0, 0, 2, 4)), result.pushed)
+    }
+
+    @Test
+    fun testResizeBottomPushesCardBelow() {
+        // 下方纵向不设限：B 一直被推到 A 的下缘之下
+        val a = card("A", 0, 0, 4, 4)
+        val obstacles = listOf(card("B", 0, 8, 4, 4))
+        val result = HomeGridEngine.resizeWithPush(a, HomeResizeEdge.Bottom, IntOffset(0, 100), 16, CardLimits.DEFAULT, obstacles)
+        assertEquals(card("A", 0, 0, 4, 12), result.layout)
+        assertEquals(mapOf("B" to card("B", 0, 12, 4, 4)), result.pushed)
+    }
+
+    @Test
+    fun testResizeTopPushesCardAbove() {
+        // 上缘扩张：B 被推向网格顶部，A 止步于 B 的原位
+        val a = card("A", 0, 4, 4, 4)
+        val obstacles = listOf(card("B", 0, 1, 4, 2))
+        val result = HomeGridEngine.resizeWithPush(a, HomeResizeEdge.Top, IntOffset(0, 0), 16, CardLimits.DEFAULT, obstacles)
+        assertEquals(card("A", 0, 2, 4, 6), result.layout)
+        assertEquals(mapOf("B" to card("B", 0, 0, 4, 2)), result.pushed)
+    }
+
+    @Test
+    fun testResizeShrinkUnaffectedByPush() {
+        // 收缩方向不受推挤影响，仅受最小跨度约束
+        val a = card("A", 0, 0, 8, 4)
+        val obstacles = listOf(card("B", 8, 0, 4, 4))
+        val result = HomeGridEngine.resizeWithPush(a, HomeResizeEdge.End, IntOffset(0, 0), 16, CardLimits.DEFAULT, obstacles)
+        assertEquals(card("A", 0, 0, 4, 4), result.layout)
+        assertTrue(result.pushed.isEmpty())
+    }
+
+    @Test
+    fun testResizePushResolvesPerpendicularOverlap() {
+        // B 的行范围超出 A：被推开后会压到行范围之外的 C，C 需要联动让开
+        val a = card("A", 0, 0, 4, 4)
+        val obstacles = listOf(
+            card("B", 4, 0, 4, 6),
+            card("C", 10, 4, 4, 4)
+        )
+        val result = HomeGridEngine.resizeWithPush(a, HomeResizeEdge.End, IntOffset(12, 0), 16, CardLimits.DEFAULT, obstacles)
+        assertEquals(card("A", 0, 0, 8, 4), result.layout)
+        assertEquals(
+            mapOf(
+                "B" to card("B", 8, 0, 4, 6),
+                "C" to card("C", 12, 4, 4, 4)
+            ),
+            result.pushed
+        )
+    }
+
     // ---------- 重排 ----------
 
     @Test

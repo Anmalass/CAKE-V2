@@ -22,20 +22,7 @@ import androidx.compose.ui.unit.IntOffset
 import com.movtery.zalithlauncher.ui.screens.content.home.HomeGridEngine.resizeWall
 import kotlin.math.roundToInt
 
-/**
- * 主页网格的纯逻辑布局引擎，不依赖 Compose 与 Android 运行时。
- *
- * 核心语义：
- * - 卡片不可堆叠：移动中的卡片实时占据预览单元格，
- *   被重叠的卡片在全局范围内搜索最近的空闲位置让位（不级联、不改尺寸）；
- * - 缩放采用碰壁语义：扩张遇到其他卡片或网格左、右、上边缘（下方不设限）即止步，
- *   不挤压其他卡片让位；
- * - 宽度方向容忍空位（行尾允许留空），高度方向不容忍空位
- *   （任何一次布局结算后执行垂直压实，卡片尽可能上浮）；
- * - 纵向不设上限，网格高度随内容增长。
- */
 object HomeGridEngine {
-
     /** 卡片是否完全位于网格边界内（纵向不设限） */
     fun isInGrid(layout: CardLayout, columns: Int): Boolean =
         layout.x >= 0 && layout.y >= 0 && layout.right <= columns
@@ -163,6 +150,120 @@ object HomeGridEngine {
                 current.copy(y = current.bottom - height, height = height)
             }
         }
+    }
+
+    /**
+     * 依据指针所在的单元格计算缩放布局，锚定被拖动边的对侧，
+     * 扩张方向上的网格边缘与 [limits] 为硬性界限。
+     *
+     * 被扩张重叠的卡片沿扩张方向被推至与前沿齐平，
+     * 并联动推开自身推进方向上被压到的其他卡片；
+     * 链条推不动时，跨度回退至可推动的最远位置。
+     */
+    fun resizeWithPush(
+        current: CardLayout,
+        edge: HomeResizeEdge,
+        pointer: IntOffset,
+        columns: Int,
+        limits: CardLimits,
+        obstacles: List<CardLayout>
+    ): ResizePushResult {
+        val desired = resizeWithWalls(current, edge, pointer, columns, limits, obstacles = emptyList())
+        if (desired.spanOf(edge) <= current.spanOf(edge)) return ResizePushResult(desired, emptyMap())
+        var candidate = desired
+        while (true) {
+            val pushed = pushForward(candidate, edge, columns, obstacles)
+            if (pushed != null) return ResizePushResult(candidate, pushed)
+            val span = candidate.spanOf(edge) - 1
+            if (span < current.spanOf(edge)) return ResizePushResult(current, emptyMap())
+            candidate = candidate.withSpan(edge, span)
+        }
+    }
+
+    /** 推挤式缩放的结算结果：缩放布局与被推开的卡片（id -> 新布局） */
+    data class ResizePushResult(
+        val layout: CardLayout,
+        val pushed: Map<String, CardLayout>
+    )
+
+    private fun CardLayout.spanOf(edge: HomeResizeEdge): Int = when (edge) {
+        HomeResizeEdge.Start, HomeResizeEdge.End -> width
+        HomeResizeEdge.Top, HomeResizeEdge.Bottom -> height
+    }
+
+    private fun CardLayout.withSpan(edge: HomeResizeEdge, span: Int): CardLayout = when (edge) {
+        HomeResizeEdge.End -> copy(width = span)
+        HomeResizeEdge.Start -> copy(x = right - span, width = span)
+        HomeResizeEdge.Bottom -> copy(height = span)
+        HomeResizeEdge.Top -> copy(y = bottom - span, height = span)
+    }
+
+    /**
+     * 沿扩张方向推挤与 [candidate] 重叠的卡片：
+     * 卡片依次被推至与前沿齐平，并联动推开自身推进方向上被压到的其他卡片；
+     * 任何一张卡片触及网格边缘即整条链条推不动。
+     *
+     * @return 被推动的卡片（id -> 新布局），推不动时返回 null
+     */
+    private fun pushForward(
+        candidate: CardLayout,
+        edge: HomeResizeEdge,
+        columns: Int,
+        obstacles: List<CardLayout>
+    ): Map<String, CardLayout>? {
+        val horizontal = edge == HomeResizeEdge.Start || edge == HomeResizeEdge.End
+        val forward = edge == HomeResizeEdge.End || edge == HomeResizeEdge.Bottom
+
+        // 卡片朝向前沿的一侧
+        fun leading(card: CardLayout): Int = when {
+            horizontal && forward -> card.x
+            horizontal -> card.right
+            forward -> card.y
+            else -> card.bottom
+        }
+        fun span(card: CardLayout): Int = if (horizontal) card.width else card.height
+        fun inBand(card: CardLayout): Boolean =
+            if (horizontal) overlapsVertically(candidate, card) else overlapsHorizontally(candidate, card)
+        fun placedAt(card: CardLayout, front: Int): CardLayout = when {
+            horizontal && forward -> card.copy(x = front)
+            horizontal -> card.copy(x = front - card.width)
+            forward -> card.copy(y = front)
+            else -> card.copy(y = front - card.height)
+        }
+
+        // 前沿从候选布局的被拖动边出发，随推挤推进
+        var front = when {
+            horizontal && forward -> candidate.right
+            horizontal -> candidate.x
+            forward -> candidate.bottom
+            else -> candidate.y
+        }
+        val pushed = mutableMapOf<String, CardLayout>()
+        // 被推入的矩形可能压到扩张带之外的卡片，待推队列随之动态增长
+        val queue = obstacles
+            .filter { it.id != candidate.id && inBand(it) }
+            .toMutableList()
+        while (queue.isNotEmpty()) {
+            queue.sortBy { if (forward) leading(it) else -leading(it) }
+            val card = queue.removeAt(0)
+            // 距前沿最近的卡片已被容纳到前沿之外，其后的卡片更远，推挤结束
+            if (if (forward) leading(card) >= front else leading(card) <= front) break
+            val placed = placedAt(card, front)
+            front += if (forward) span(card) else -span(card)
+            val blocked = when {
+                horizontal && forward -> front > columns
+                forward -> false
+                else -> front < 0
+            }
+            if (blocked) return null
+            pushed[card.id] = placed
+            queue.addAll(
+                obstacles.filter {
+                    it.id != candidate.id && it.id !in pushed && it.intersects(placed) && it !in queue
+                }
+            )
+        }
+        return pushed
     }
 
     /**
