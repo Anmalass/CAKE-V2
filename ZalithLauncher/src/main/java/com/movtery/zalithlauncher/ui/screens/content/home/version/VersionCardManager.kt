@@ -89,10 +89,14 @@ object VersionCardManager {
     val cards: StateFlow<List<VersionCardState>> = _cards.asStateFlow()
 
     init {
-        _cards.value = loadRecords().map { VersionCardState(it, VersionCardStatus.Loading) }
+        _cards.value = loadRecords().map { record ->
+            VersionCardState(record, VersionCardStatus.Loading)
+        }
         recheck()
-        //版本列表刷新（删除、切换目录等）后同步卡片可用性
-        VersionsManager.registerListener { recheck() }
+        //版本列表刷新后同步卡片可用性
+        VersionsManager.registerListener {
+            recheck()
+        }
     }
 
     /** 指定版本是否已存在对应卡片 */
@@ -157,7 +161,7 @@ object VersionCardManager {
     /**
      * 重新检查全部卡片的可用性
      */
-    fun recheck() {
+    private fun recheck() {
         scope.launch {
             val current = _cards.value
             if (current.isEmpty()) return@launch
@@ -178,6 +182,12 @@ object VersionCardManager {
         if (!File(gameHome).exists()) return VersionCardStatus.Inaccessible
         val version = VersionsManager.loadVersion(gameHome, record.versionName)
             ?: return VersionCardStatus.Deleted
+        Logger.info(
+            TAG,
+            "Version card loaded version: ${version.getVersionName()}, " +
+                    "Path: (${version.getVersionPath()}), " +
+                    "Info: ${version.getVersionInfo()?.getInfoString()}"
+        )
         return VersionCardStatus.Available(version)
     }
 
