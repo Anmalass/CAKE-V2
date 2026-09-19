@@ -71,7 +71,7 @@ class GridEnginePerfTest {
     // ---------- 拖动热路径 ----------
 
     @Test
-    fun testResolveDragUnderLongDragPath() {
+    fun testResolveDisplacementsUnderLongDragPath() {
         val columns = 16
         // 80 张卡 ≈ 2400+ 单元格，网格纵深约百行，远超正常使用规模
         val cards = generateGrid(count = 80, columns = columns, seed = 42L)
@@ -80,7 +80,7 @@ class GridEnginePerfTest {
 
         // 预热 JIT
         repeat(50) {
-            GridEngine.resolveDrag(mover, IntOffset(mover.x, mover.y), columns, others)
+            GridEngine.resolveDisplacements(mover, columns, others)
         }
 
         // 模拟一次贯穿整张网格的拖动：从左上到右下逐步换格
@@ -89,19 +89,19 @@ class GridEnginePerfTest {
         val warm = measureMs {
             for (step in 0 until steps) {
                 val t = step / steps.toFloat()
-                val target = IntOffset(
-                    ((columns - mover.width) * t).toInt(),
-                    ((maxY - mover.height) * t).toInt()
+                val preview = mover.copy(
+                    x = ((columns - mover.width) * t).toInt(),
+                    y = ((maxY - mover.height) * t).toInt()
                 )
-                val result = GridEngine.resolveDrag(mover, target, columns, others)
-                val relocated = others.map { result.pushed[it.id] ?: it }
-                assertNoOverlap(relocated + result.layout)
+                val displaced = GridEngine.resolveDisplacements(preview, columns, others)
+                val relocated = others.map { displaced[it.id] ?: it }
+                assertNoOverlap(relocated + preview)
             }
         }
         val perCallMs = warm.toDouble() / steps
-        println("resolveDrag: ${warm}ms / $steps steps = ${"%.3f".format(perCallMs)}ms per call (80 cards, 16 cols)")
+        println("resolveDisplacements: ${warm}ms / $steps steps = ${"%.3f".format(perCallMs)}ms per call (80 cards, 16 cols)")
         // 宽松预算：单次结算在桌面 JVM 上应远低于 10ms
-        assertTrue("resolveDrag took too long: $perCallMs ms", perCallMs < 10.0)
+        assertTrue("resolveDisplacements took too long: $perCallMs ms", perCallMs < 10.0)
     }
 
     // ---------- 缩放热路径 ----------

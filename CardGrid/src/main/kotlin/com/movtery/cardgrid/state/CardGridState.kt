@@ -158,7 +158,7 @@ class CardGridState internal constructor(
      */
     private var pointerAnchorInRoot: Offset? = null
 
-    /** 被推挤让位的卡片（id -> 让位布局），仅会话期间非空 */
+    /** 被挤开让位的卡片（id -> 让位布局）：会话期间实时更新为预览态，松手提交后持久化 */
     var displaced by mutableStateOf<Map<String, CardRect>>(emptyMap())
         private set
 
@@ -385,20 +385,28 @@ class CardGridState internal constructor(
             pointer.y - current.grabOffset.y
         )
         dragRawRect = Rect(offset = topLeft, size = size)
+        // 吸附到单元格，横向钳制在网格内
+        // 被压卡片依据手指位置实时做方向性让位预览
         val target = IntOffset(
-            (topLeft.x / cellPx).roundToInt(),
-            (topLeft.y / cellPx).roundToInt()
+            (topLeft.x / cellPx).roundToInt().coerceIn(0, geometry.columns - current.card.layout.width),
+            (topLeft.y / cellPx).roundToInt().coerceAtLeast(0)
         )
-        val result = GridEngine.resolveDrag(
-            moving = current.card.layout,
-            target = target,
-            columns = geometry.columns,
-            obstacles = layouts().filterNot { it.id == current.card.id }
+        val preview = current.card.layout.positionAt(target)
+        applyPreview(
+            preview,
+            GridEngine.resolveDisplacements(
+                moving = preview,
+                columns = geometry.columns,
+                cards = layouts(),
+                pointer = IntOffset(
+                    (pointer.x / cellPx).roundToInt(),
+                    (pointer.y / cellPx).roundToInt()
+                )
+            )
         )
-        applyPreview(result.layout, result.pushed)
     }
 
-    /** 松手：提交预览布局并压实 */
+    /** 松手：结算落位与被挤开的卡片，压实并持久化 */
     fun onCardDragEnd() {
         val current = session ?: return
         commit(previewLayoutOf(current))
@@ -548,28 +556,29 @@ class CardGridState internal constructor(
 
     private fun layouts(): List<CardRect> = cards.map { it.layout }
 
-    /** 应用新的吸附预览：动画过渡被推挤的卡片与刚脱离推挤的卡片 */
-    private fun applyPreview(preview: CardRect, pushed: Map<String, CardRect>) {
-        if (dragPreview == preview && displaced.keys == pushed.keys) return
+    /** 应用新的吸附预览：动画过渡让位中的卡片与刚脱离让位的卡片 */
+    private fun applyPreview(preview: CardRect, displacements: Map<String, CardRect>) {
+        if (dragPreview == preview && displaced.keys == displacements.keys) return
         dragPreview = preview
-        val affected = displaced.keys + pushed.keys
-        displaced = pushed
+        val affected = displaced.keys + displacements.keys
+        displaced = displacements
         affected.forEach { id ->
             cards.firstOrNull { it.id == id }?.let { card ->
-                animateTo(card, pushed[id] ?: card.layout, fastSpec)
+                animateTo(card, displacements[id] ?: card.layout, fastSpec)
             }
         }
     }
 
-    /** 提交会话结果：合并拖动卡与被推挤卡，压实并持久化 */
+    /** 提交会话结果：沿用会话过程中的让位结算，压实并持久化 */
     private fun commit(target: CardRect) {
         val current = session ?: return
         // endSession 会清空跟手矩形，必须先捕获供动画器吸附
         val rawRect = dragRawRect
+        val settled = displaced
         cards = cards.map { card ->
             when {
                 card.id == current.card.id -> card.copy(layout = target)
-                else -> displaced[card.id]?.let { card.copy(layout = it) } ?: card
+                else -> settled[card.id]?.let { card.copy(layout = it) } ?: card
             }
         }
         cards = compactCards(cards)

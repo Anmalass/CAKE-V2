@@ -162,21 +162,22 @@ class CardGridStateTest {
     // ---------- 拖动会话 ----------
 
     @Test
-    fun testDragSessionPushesAndCommits() {
+    fun testDragSessionDisplacesLiveAndCommits() {
         val state = seededState(
             CardRect("A", 0, 0, 4, 4),
             CardRect("B", 4, 0, 4, 4)
         )
         state.onCardDragStart(state.cards.first { it.id == "A" }, Offset(50f, 50f))
-        // 指针从第 2.5 格拖到第 8.5 格：A 落到第 2 格，B 被推到第 6 格
+        // 指针拖到第 8 格：拖动中 B 实时让位预览（指针压在 B 中心右侧 → 向左滑开）
         state.onCardDrag(Offset(170f, 50f))
 
-        assertEquals(CardRect("A", 2, 0, 4, 4), state.dragPreview)
-        assertEquals(mapOf("B" to CardRect("B", 6, 0, 4, 4)), state.displaced)
+        assertEquals(CardRect("A", 6, 0, 4, 4), state.dragPreview)
+        assertEquals(mapOf("B" to CardRect("B", 2, 0, 4, 4)), state.displaced)
 
+        // 松手提交让位结果并持久化
         state.onCardDragEnd()
-        assertEquals(CardRect("A", 2, 0, 4, 4), layoutOf(state, "A"))
-        assertEquals(CardRect("B", 6, 0, 4, 4), layoutOf(state, "B"))
+        assertEquals(CardRect("A", 6, 0, 4, 4), layoutOf(state, "A"))
+        assertEquals(CardRect("B", 2, 0, 4, 4), layoutOf(state, "B"))
         assertFalse(state.hasSession)
     }
 

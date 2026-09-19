@@ -157,104 +157,108 @@ class GridEngineTest {
         )
     }
 
-    // ---------- 拖动结算 ----------
+    // ---------- 挤压结算 ----------
 
     @Test
-    fun testDragMovesFreelyInEmptySpace() {
-        val a = card("A", 0, 0, 4, 4)
-        val result = GridEngine.resolveDrag(a, IntOffset(8, 6), 16, emptyList())
-        assertEquals(card("A", 8, 6, 4, 4), result.layout)
-        assertTrue(result.pushed.isEmpty())
+    fun testDisplacedCardSlidesSidewaysWithoutCascade() {
+        val columns = 16
+        val moving = card("A", 0, 0, 8, 4)
+        val others = listOf(
+            card("B", 4, 0, 8, 4),   // 与 A 重叠，将被挤压
+            card("C", 0, 4, 8, 4)    // 未被重叠，不允许被级联影响
+        )
+        val result = GridEngine.resolveDisplacements(moving, columns, others)
+        // B 滑到 A 右侧，尺寸不变
+        assertEquals(card("B", 8, 0, 8, 4), result["B"])
+        // C 完全不受影响
+        assertFalse(result.containsKey("C"))
     }
 
     @Test
-    fun testDragRightPushesChain() {
-        // 拖动卡压到 B：B 被推至与拖动卡齐平，联动顶开 C
+    fun testDisplacedCardFallsToNextRowWhenRowFull() {
+        val columns = 16
+        val moving = card("A", 0, 0, 16, 4)
+        val others = listOf(card("B", 0, 0, 8, 4))
+        val result = GridEngine.resolveDisplacements(moving, columns, others)
+        // 行内无处可去，B 落到下一行
+        assertEquals(card("B", 0, 4, 8, 4), result["B"])
+    }
+
+    @Test
+    fun testDragOverlapsTwoCardsDisplacesBoth() {
+        val columns = 16
+        // 拖动挤压同时压到左右两张卡
+        val moving = card("B", 4, 0, 8, 4)
+        val others = listOf(
+            card("L", 0, 0, 6, 4),
+            card("R", 10, 0, 6, 4)
+        )
+        val result = GridEngine.resolveDisplacements(moving, columns, others)
+        assertEquals(2, result.size)
+        val settled = others.map { result[it.id] ?: it } + moving
+        assertFalse(GridEngine.hasOverlap(settled))
+    }
+
+    @Test
+    fun testDisplacementDirectionPicksDominantSide() {
+        // 指针压到卡片中心的哪一侧，卡片就向相反方向让开
+        val b = card("B", 4, 4, 4, 4)
+        // 指针在中心左侧 → 向右让
+        assertEquals(IntOffset(1, 0), GridEngine.displacementDirection(IntOffset(3, 6), b))
+        // 指针在中心右侧 → 向左让
+        assertEquals(IntOffset(-1, 0), GridEngine.displacementDirection(IntOffset(9, 6), b))
+        // 指针在中心上方 → 向下让
+        assertEquals(IntOffset(0, 1), GridEngine.displacementDirection(IntOffset(6, 3), b))
+        // 指针在中心下方 → 向上让
+        assertEquals(IntOffset(0, -1), GridEngine.displacementDirection(IntOffset(6, 9), b))
+        // 主导轴并列时取横向
+        assertEquals(IntOffset(-1, 0), GridEngine.displacementDirection(IntOffset(8, 8), b))
+    }
+
+    @Test
+    fun testDirectionalFreeSlotSlidesSidewaysFirst() {
+        // 竖向让步过于积极的回归：指针压在 B 左半 → B 向右横滑贴住拖动卡，而不是掉到下一行
+        val others = listOf(card("B", 4, 0, 4, 4))
+        val result = GridEngine.resolveDisplacements(card("A", 0, 0, 6, 4), 16, others, IntOffset(5, 1))
+        assertEquals(mapOf("B" to card("B", 6, 0, 4, 4)), result)
+
+        // 指针压在 B 上半 → B 向下滑让位
+        val downward = GridEngine.resolveDisplacements(card("A", 0, 0, 16, 6), 16, listOf(card("B", 0, 0, 4, 4)), IntOffset(2, 1))
+        assertEquals(mapOf("B" to card("B", 0, 6, 4, 4)), downward)
+    }
+
+    @Test
+    fun testDirectionalFreeSlotFallsBackWhenBlocked() {
+        // 让位方向被堵死时退化为最近空位
         val a = card("A", 0, 0, 4, 4)
         val others = listOf(
             card("B", 4, 0, 4, 4),
-            card("C", 8, 0, 4, 4)
+            card("C", 8, 0, 4, 4),
+            card("D", 12, 0, 4, 4)
         )
-        val result = GridEngine.resolveDrag(a, IntOffset(4, 0), 16, others)
-        assertEquals(card("A", 4, 0, 4, 4), result.layout)
-        assertEquals(
-            mapOf(
-                "B" to card("B", 8, 0, 4, 4),
-                "C" to card("C", 12, 0, 4, 4)
-            ),
-            result.pushed
-        )
+        // A 缩放扩到 8 宽压到 B；指针在 B 左半 → 向右，但 C/D 堵死右侧 → 退化最近空位
+        val result = GridEngine.resolveDisplacements(card("A", 0, 0, 8, 4), 16, others, IntOffset(5, 1))
+        val settled = others.map { result[it.id] ?: it } + card("A", 0, 0, 8, 4)
+        assertFalse(GridEngine.hasOverlap(settled))
+        // B 让位到下方（右侧无空位）
+        assertTrue(result.getValue("B").y > 0)
     }
 
     @Test
-    fun testDragDownPushesCardBelow() {
-        val a = card("A", 0, 0, 4, 4)
-        val others = listOf(card("B", 0, 4, 4, 4))
-        val result = GridEngine.resolveDrag(a, IntOffset(0, 4), 16, others)
-        assertEquals(card("A", 0, 4, 4, 4), result.layout)
-        assertEquals(mapOf("B" to card("B", 0, 8, 4, 4)), result.pushed)
-    }
-
-    @Test
-    fun testDragDominantAxisPicksLargerDelta() {
-        // 纵向位移大于横向：压到的卡片沿纵向被推开
-        val a = card("A", 0, 0, 4, 4)
-        val others = listOf(card("B", 0, 4, 4, 4))
-        val result = GridEngine.resolveDrag(a, IntOffset(2, 4), 16, others)
-        assertEquals(card("A", 2, 4, 4, 4), result.layout)
-        assertEquals(mapOf("B" to card("B", 0, 8, 4, 4)), result.pushed)
-    }
-
-    @Test
-    fun testDragCornerOverlapPushesAlongDominantAxis() {
-        // 斜向切入压到角落上的卡片：沿主导轴推离重叠
-        val a = card("A", 0, 0, 4, 4)
-        val others = listOf(card("D", 4, 0, 4, 4))
-        val result = GridEngine.resolveDrag(a, IntOffset(2, 3), 16, others)
-        assertEquals(card("A", 2, 3, 4, 4), result.layout)
-        assertEquals(mapOf("D" to card("D", 4, 7, 4, 4)), result.pushed)
-    }
-
-    @Test
-    fun testDragIntoFullRowClampsToOriginal() {
-        // 整行推不开：落点钳制回原位
-        val a = card("A", 0, 0, 4, 4)
-        val others = listOf(
+    fun testDirectionalFreeSlotScansAlongAxis() {
+        val obstacles = listOf(
+            card("A", 0, 0, 4, 4),
             card("B", 4, 0, 4, 4),
             card("C", 8, 0, 4, 4)
         )
-        val result = GridEngine.resolveDrag(a, IntOffset(4, 0), 12, others)
-        assertEquals(a, result.layout)
-        assertTrue(result.pushed.isEmpty())
-    }
-
-    @Test
-    fun testDragLeftBlockedByCardClampsToOriginal() {
-        // 左侧卡片贴合网格左缘无法后退：落点钳制回原位
-        val a = card("A", 4, 0, 4, 4)
-        val others = listOf(card("B", 0, 0, 4, 4))
-        val result = GridEngine.resolveDrag(a, IntOffset(0, 0), 16, others)
-        assertEquals(a, result.layout)
-        assertTrue(result.pushed.isEmpty())
-    }
-
-    @Test
-    fun testDragResolvesPerpendicularOverlap() {
-        // 被压卡片的行范围超出拖动卡：推开后压到的卡片联动让开
-        val a = card("A", 0, 0, 4, 4)
-        val others = listOf(
-            card("B", 4, 0, 4, 6),
-            card("C", 10, 4, 4, 4)
-        )
-        val result = GridEngine.resolveDrag(a, IntOffset(4, 0), 16, others)
-        assertEquals(card("A", 4, 0, 4, 4), result.layout)
-        assertEquals(
-            mapOf(
-                "B" to card("B", 8, 0, 4, 6),
-                "C" to card("C", 12, 4, 4, 4)
-            ),
-            result.pushed
-        )
+        // B 从 (4,0) 向右逐格扫描，(5,0) 撞 C、到 (12,0) 无阻挡
+        val slot = GridEngine.findDirectionalFreeSlot(card("B", 4, 0, 4, 4), IntOffset(1, 0), 16, obstacles)
+        assertEquals(IntOffset(12, 0), slot)
+        // 向上越出网格顶部返回 null
+        assertNull(GridEngine.findDirectionalFreeSlot(card("B", 4, 0, 4, 4), IntOffset(0, -1), 16, obstacles))
+        // 向下到障碍下方
+        val down = GridEngine.findDirectionalFreeSlot(card("B", 4, 0, 4, 4), IntOffset(0, 1), 16, obstacles)
+        assertEquals(IntOffset(4, 4), down)
     }
 
     // ---------- 缩放结算 ----------
@@ -599,7 +603,7 @@ class GridEngineTest {
             repeat(20) {
                 val mover = cards[random.nextInt(cards.size)]
                 val others = cards.filter { it.id != mover.id }
-                val result: GridEngine.DragResult = if (random.nextBoolean()) {
+                val settled: List<CardRect> = if (random.nextBoolean()) {
                     val edge = ResizeEdge.entries[random.nextInt(ResizeEdge.entries.size)]
                     val pointer = when (edge) {
                         ResizeEdge.End -> IntOffset(mover.x + random.nextInt(columns * 2), mover.y + random.nextInt(4))
@@ -608,16 +612,14 @@ class GridEngineTest {
                         ResizeEdge.Top -> IntOffset(mover.x, random.nextInt(20) - 5)
                     }
                     val resized = GridEngine.resolveResize(mover, edge, pointer, columns, CardLimits.DEFAULT, others)
-                    GridEngine.DragResult(resized.layout, resized.pushed)
+                    others.map { resized.pushed[it.id] ?: it } + resized.layout
                 } else {
-                    GridEngine.resolveDrag(
-                        mover,
-                        IntOffset(random.nextInt(columns), random.nextInt(40)),
-                        columns,
-                        others
-                    )
+                    // 拖动挤压：预览落位加上被挤开的卡片
+                    val target = IntOffset(random.nextInt(columns - mover.width + 1), random.nextInt(40))
+                    val preview = mover.positionAt(target)
+                    val displaced = GridEngine.resolveDisplacements(preview, columns, others)
+                    others.map { displaced[it.id] ?: it } + preview
                 }
-                val settled = others.map { result.pushed[it.id] ?: it } + result.layout
                 assertFalse(
                     "Round $round: settled layout must not overlap: $settled",
                     GridEngine.hasOverlap(settled)

@@ -28,19 +28,14 @@ import kotlin.math.roundToInt
 /**
  * 卡片网格布局引擎：全部结算均为无副作用的纯函数。
  *
- * 拖动与缩放共用同一套推挤语义——沿运动主导轴把挡路的卡片推开成链，
- * 推不动时收缩诉求（回退落点或跨度）；任何时刻布局都处于垂直压实状态。
+ * 缩放使用推箱式语义——沿被拖边把挡路的卡片推开成链，推不动时逐格收缩跨度；
+ * 拖动使用挤压让位语义——被压住的卡片各自迁移到最近的空闲位置，不级联影响其他卡片；
+ * 任何时刻布局都处于垂直压实状态。
  */
 object GridEngine {
 
     /** 推挤运动的主导轴 */
     internal enum class PushAxis { Horizontal, Vertical }
-
-    /** 拖动结算结果：拖动卡的落位布局与被推开的卡片（id -> 新布局） */
-    data class DragResult(
-        val layout: CardRect,
-        val pushed: Map<String, CardRect>
-    )
 
     /** 缩放结算结果：缩放卡的布局与被推开的卡片（id -> 新布局） */
     data class ResizeResult(
@@ -104,46 +99,79 @@ object GridEngine {
     }
 
     /**
-     * 拖动结算：以 [moving] 的当前布局为锚，落到单元格坐标 [target]（左上角），
-     * 横向钳制在网格内、纵向不设上限。
-     *
-     * 落位挡住的卡片沿本次移动的主导轴（横向与纵向位移的较大者，相同取横向）
-     * 被推至与拖动卡前沿齐平，并联动推开自身推进方向上被压到的其他卡片；
-     * 推不动时，落点沿主导轴朝原位逐格回退，钳制在最近一次可推开的落点上。
+     * 拖动结算：[moving] 为拖动中的卡片预览（或落位），
+     * 与其重叠的卡片按阅读顺序依次被重新安置，尺寸保持不变，
+     * 且不会级联影响未被直接重叠的卡片
+     * @return 被重新安置的卡片（id -> 新布局），不包含未受影响的卡片
      */
-    fun resolveDrag(
+    fun resolveDisplacements(
         moving: CardRect,
-        target: IntOffset,
+        columns: Int,
+        cards: List<CardRect>,
+        pointer: IntOffset? = null
+    ): Map<String, CardRect> {
+        val displaced = cards
+            .filter { it.id != moving.id && it.intersects(moving) }
+            .sortedWith(readingOrder())
+        val occupied = mutableListOf<CardRect>()
+        occupied.add(moving)
+        occupied.addAll(cards.filter { it.id != moving.id && !it.intersects(moving) })
+        val result = mutableMapOf<String, CardRect>()
+        for (card in displaced) {
+            val nearest: () -> IntOffset? = {
+                findNearestFreeSlot(
+                    width = card.width,
+                    height = card.height,
+                    origin = IntOffset(card.x, card.y),
+                    columns = columns,
+                    obstacles = occupied
+                )
+            }
+            val slot = pointer?.let {
+                findDirectionalFreeSlot(card, displacementDirection(it, card), columns, occupied) ?: nearest()
+            } ?: nearest() ?: continue
+            val relocated = card.positionAt(slot)
+            occupied.add(relocated)
+            result[card.id] = relocated
+        }
+        return result
+    }
+
+    /**
+     * 依据指针相对被压卡片中心的主导方向决定让位方向
+     * 指针压到卡片的哪一侧，卡片就沿该轴向远离指针的一侧让开
+     */
+    internal fun displacementDirection(pointer: IntOffset, card: CardRect): IntOffset {
+        val dx = pointer.x - (card.x + card.width / 2f)
+        val dy = pointer.y - (card.y + card.height / 2f)
+        return if (abs(dx) >= abs(dy)) {
+            IntOffset(if (dx > 0) -1 else 1, 0)
+        } else {
+            IntOffset(0, if (dy > 0) -1 else 1)
+        }
+    }
+
+    /**
+     * 从 [card] 当前位置沿 [direction]（单位向量）逐格搜索第一个
+     * 不与 [obstacles] 重叠的位置，与运动轴垂直的坐标保持不变，
+     * 网格横向钳制、纵向向下不设限。
+     * @return 让位空位，该方向上无空位时返回 null
+     */
+    fun findDirectionalFreeSlot(
+        card: CardRect,
+        direction: IntOffset,
         columns: Int,
         obstacles: List<CardRect>
-    ): DragResult {
-        val clamped = IntOffset(
-            target.x.coerceIn(0, columns - moving.width),
-            target.y.coerceAtLeast(0)
-        )
-        val candidate = moving.positionAt(clamped)
-        val dx = clamped.x - moving.x
-        val dy = clamped.y - moving.y
-        if (dx == 0 && dy == 0) return DragResult(candidate, emptyMap())
-
-        val horizontal = abs(dx) >= abs(dy)
-        val axis = if (horizontal) PushAxis.Horizontal else PushAxis.Vertical
-        val forward = if (horizontal) dx > 0 else dy > 0
-
-        var current = candidate
+    ): IntOffset? {
+        var x = card.x
+        var y = card.y
         while (true) {
-            val pushed = push(current, axis, forward, columns, obstacles)
-            if (pushed != null) return DragResult(current, pushed)
-            // 推不动：沿主导轴朝原位逐格回退，回到原位时布局无重叠，推挤必然成功
-            current = if (horizontal) {
-                current.copy(x = current.x + if (forward) -1 else 1)
-            } else {
-                current.copy(y = current.y + if (forward) -1 else 1)
-            }
-            val reachedOriginal = if (horizontal) current.x == moving.x else current.y == moving.y
-            if (reachedOriginal) {
-                return DragResult(moving, push(moving, axis, forward, columns, obstacles) ?: emptyMap())
-            }
+            x += direction.x
+            y += direction.y
+            if (direction.x != 0 && (x < 0 || x + card.width > columns)) return null
+            if (direction.y < 0 && y < 0) return null
+            val candidate = card.positionAt(IntOffset(x, y))
+            if (obstacles.none { it.intersects(candidate) }) return IntOffset(x, y)
         }
     }
 
