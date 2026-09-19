@@ -19,22 +19,31 @@
 package com.movtery.zalithlauncher.ui.screens.content.home
 
 import com.google.gson.Gson
+import com.google.gson.annotations.SerializedName
 import com.movtery.cardgrid.state.GridCard
 import com.tencent.mmkv.MMKV
 
 /** 单张卡片的持久化数据 */
 data class HomeCardSnapshot(
+    @SerializedName("id")
     val id: String = "",
+    @SerializedName("type")
     val type: String = "",
+    @SerializedName("x")
     val x: Int = 0,
+    @SerializedName("y")
     val y: Int = 0,
+    @SerializedName("width")
     val width: Int = 0,
+    @SerializedName("height")
     val height: Int = 0
 )
 
 /** 网格布局的持久化数据，[columns] 为保存时的网格列数 */
 data class HomeGridSnapshot(
+    @SerializedName("columns")
     val columns: Int = 0,
+    @SerializedName("cards")
     val cards: List<HomeCardSnapshot> = emptyList()
 )
 
@@ -44,7 +53,6 @@ data class HomeGridSnapshot(
  * 系统卡片不参与持久化。
  */
 object HomeGridStore {
-
     private const val KEY_LAYOUT = "homeCardLayout"
 
     private val mmkv: MMKV by lazy { MMKV.mmkvWithID("home_grid") }
