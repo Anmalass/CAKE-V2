@@ -68,6 +68,14 @@ class CardGridStateTest {
     private fun layoutOf(state: CardGridState, id: String): CardRect =
         state.cards.first { it.id == id }.layout
 
+    @Test
+    fun testViewportPositionedUpdatesState() {
+        val state = state()
+        state.onViewportPositioned(120f, 800f)
+        assertEquals(120f, state.viewportTopPx, 0f)
+        assertEquals(800f, state.viewportHeightPx, 0f)
+    }
+
     // ---------- 播种 ----------
 
     @Test

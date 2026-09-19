@@ -79,6 +79,11 @@ private val GridFadeExtent = 72.dp
 /** 网格线的最大不透明度（卡片矩形处） */
 private const val GridLineMaxAlpha = 0.35f
 
+/** 调整态工具条的高度 */
+private val ToolbarHeight = 40.dp
+/** 工具条与卡片边缘的间隙 */
+private val ToolbarGap = 8.dp
+
 /**
  * 卡片网格容器
  * @param cardBackground 卡片内容的背景装饰，在卡片表面内部应用
@@ -220,6 +225,7 @@ fun CardGrid(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun CardSlot(
     state: CardGridState,
@@ -256,11 +262,26 @@ private fun CardSlot(
         }
 
         if (adjusting && adjustingBar != null) {
+            val density = LocalDensity.current
+            val barExtentPx = with(density) { (ToolbarHeight + ToolbarGap).toPx() }
+            val cardTopInViewport = state.areaOffsetInRoot.y +
+                state.rectFor(state.effectiveLayout(card)).top - state.viewportTopPx
+            val placeAbove = cardTopInViewport >= barExtentPx
+            val barOffset by animateDpAsState(
+                targetValue = if (placeAbove) {
+                    -(ToolbarHeight + ToolbarGap)
+                } else {
+                    with(density) { rectProvider().height.toDp() } + ToolbarGap
+                },
+                animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
+                label = "cardToolbarOffset"
+            )
+
             adjustingBar(
                 Modifier
                     .align(Alignment.TopCenter)
-                    .offset(y = -(48.dp))
-                    .height(40.dp)
+                    .offset(y = barOffset)
+                    .height(ToolbarHeight)
                     .zIndex(1f)
                     .gestureGuard(),
                 card

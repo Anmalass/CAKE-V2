@@ -34,16 +34,14 @@ private const val AutoScrollMaxSpeed = 900f
 
 /**
  * 拖动/缩放会话期间的边缘自动滚动：
- * 指针接近 [viewportHeightProvider] 所给视口的首尾边缘时驱动 [scrollState] 滚动，
+ * 指针接近视口的首尾边缘时驱动 [scrollState] 滚动，
  * 滚动后重算指针位置使会话跟随。
  * 需放置在提供视口坐标的组合中，与 [CardGrid] 同处一个滚动容器。
  */
 @Composable
 fun CardGridAutoScroll(
     state: CardGridState,
-    scrollState: ScrollState,
-    viewportTopProvider: () -> Float,
-    viewportHeightProvider: () -> Float
+    scrollState: ScrollState
 ) {
     val density = LocalDensity.current
     LaunchedEffect(state.hasSession) {
@@ -57,8 +55,8 @@ fun CardGridAutoScroll(
                 val dt = (frameNanos - lastFrameNanos) / 1_000_000_000f
                 val pointer = state.pointerPosition
                 if (pointer != null) {
-                    val viewportY = state.areaOffsetInRoot.y + pointer.y - viewportTopProvider()
-                    val bottomDistance = viewportHeightProvider() - viewportY
+                    val viewportY = state.areaOffsetInRoot.y + pointer.y - state.viewportTopPx
+                    val bottomDistance = state.viewportHeightPx - viewportY
                     val dyScroll = when {
                         viewportY in 0f..edgePx ->
                             -maxSpeedPx * (1f - viewportY / edgePx) * dt

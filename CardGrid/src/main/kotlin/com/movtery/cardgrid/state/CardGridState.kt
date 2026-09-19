@@ -132,17 +132,31 @@ class CardGridState internal constructor(
     internal var areaOffsetInRoot by mutableStateOf(Offset.Zero)
         private set
 
+    /** 网格视口在窗口坐标系中的上缘（窗口坐标不受滚动影响），未上报时为 0 */
+    var viewportTopPx by mutableFloatStateOf(0f)
+        private set
+
+    /** 网格视口高度（px），未上报时为 0 */
+    var viewportHeightPx by mutableFloatStateOf(0f)
+        private set
+
+    /** 网格区域布局位置回调 */
+    fun onAreaPositioned(offsetInRoot: Offset) {
+        areaOffsetInRoot = offsetInRoot
+    }
+
+    /** 网格视口布局位置回调（窗口坐标系），供工具条放置判定与自动滚动使用 */
+    fun onViewportPositioned(topPx: Float, heightPx: Float) {
+        viewportTopPx = topPx
+        viewportHeightPx = heightPx
+    }
+
     /**
      * 手指在窗口坐标系中的锚点：窗口坐标不受滚动影响，
      * 指针的网格坐标始终由锚点与网格区域当前偏移整体换算得出，
      * 避免滚动增量与事件坐标之间的反馈振荡。
      */
     private var pointerAnchorInRoot: Offset? = null
-
-    /** 网格区域布局位置回调 */
-    fun onAreaPositioned(offsetInRoot: Offset) {
-        areaOffsetInRoot = offsetInRoot
-    }
 
     /** 被推挤让位的卡片（id -> 让位布局），仅会话期间非空 */
     var displaced by mutableStateOf<Map<String, CardRect>>(emptyMap())
@@ -526,7 +540,7 @@ class CardGridState internal constructor(
 
     // ---------- 内部：结算 ----------
 
-    private fun effectiveLayout(card: GridCard): CardRect =
+    internal fun effectiveLayout(card: GridCard): CardRect =
         displaced[card.id] ?: card.layout
 
     private fun previewLayoutOf(session: AdjustSession): CardRect =

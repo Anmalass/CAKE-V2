@@ -37,11 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -72,8 +68,6 @@ fun HomeGrid(
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
-    var viewportTop by remember { mutableFloatStateOf(0f) }
-    var viewportHeight by remember { mutableFloatStateOf(0f) }
 
     // 播种持久化的用户卡片布局
     LaunchedEffect(Unit) {
@@ -129,8 +123,10 @@ fun HomeGrid(
         modifier = modifier
             .fillMaxSize()
             .onGloballyPositioned { coordinates ->
-                viewportTop = coordinates.positionInRoot().y
-                viewportHeight = coordinates.size.height.toFloat()
+                state.onViewportPositioned(
+                    topPx = coordinates.positionInRoot().y,
+                    heightPx = coordinates.size.height.toFloat()
+                )
             }
     ) {
         Column(
@@ -173,9 +169,7 @@ fun HomeGrid(
         }
         CardGridAutoScroll(
             state = state,
-            scrollState = scrollState,
-            viewportTopProvider = { viewportTop },
-            viewportHeightProvider = { viewportHeight }
+            scrollState = scrollState
         )
     }
 }
