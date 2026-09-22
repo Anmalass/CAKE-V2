@@ -571,7 +571,6 @@ fun MenuSliderLayout(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     var showInputDialog by remember { mutableStateOf(false) }
-    val sliderState = rememberSyncedSliderState(value = value.toFloat(), valueRange = valueRange)
 
     MenuButtonLayout(
         modifier = modifier,
@@ -609,11 +608,12 @@ fun MenuSliderLayout(
                 )
             }
             IndicatorSlider(
-                state = sliderState,
                 modifier = Modifier.fillMaxWidth(),
+                value = value.toFloat(),
                 onValueChange = { onValueChange(it.toInt()) },
-                onValueChangeFinished = { onValueChangeFinished(sliderState.value.toInt()) },
+                onValueChangeFinished = { onValueChangeFinished(value) },
                 interactionSource = interactionSource,
+                valueRange = valueRange,
                 colors = colors,
                 enabled = enabled
             )
@@ -654,7 +654,6 @@ fun MenuSliderLayout(
 
     val interactionSource = remember { MutableInteractionSource() }
     var showInputDialog by remember { mutableStateOf(false) }
-    val sliderState = rememberSyncedSliderState(value = value, valueRange = valueRange)
 
     MenuButtonLayout(
         modifier = modifier,
@@ -692,11 +691,12 @@ fun MenuSliderLayout(
                 )
             }
             IndicatorSlider(
-                state = sliderState,
                 modifier = Modifier.fillMaxWidth(),
-                onValueChange = onValueChange,
-                onValueChangeFinished = { onValueChangeFinished(sliderState.value) },
+                value = value,
+                onValueChange = { onValueChange(it) },
+                onValueChangeFinished = { onValueChangeFinished(value) },
                 interactionSource = interactionSource,
+                valueRange = valueRange,
                 colors = colors,
                 enabled = enabled
             )

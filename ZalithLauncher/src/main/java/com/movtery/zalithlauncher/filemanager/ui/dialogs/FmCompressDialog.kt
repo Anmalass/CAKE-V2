@@ -30,7 +30,6 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberSliderState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -313,10 +312,11 @@ private fun AdvancedCompressSection(
             text = stringResource(R.string.fm_compress_level, level),
             style = MaterialTheme.typography.bodyMedium
         )
-        val levelState = rememberSliderState(value = level.toFloat(), steps = 7, trackRange = 1f..9f)
         IndicatorSlider(
-            state = levelState,
-            onValueChange = { onLevelChange(it.toInt()) }
+            value = level.toFloat(),
+            onValueChange = { onLevelChange(it.toInt()) },
+            valueRange = 1f..9f,
+            steps = 7
         )
     }
 

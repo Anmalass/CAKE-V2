@@ -40,7 +40,6 @@ import com.movtery.zalithlauncher.setting.unit.min
 import com.movtery.zalithlauncher.ui.components.SimpleTextSlider
 import com.movtery.zalithlauncher.ui.components.SliderValueEditDialog
 import com.movtery.zalithlauncher.ui.components.TitleAndSummary
-import com.movtery.zalithlauncher.ui.components.rememberSyncedSliderState
 import com.movtery.zalithlauncher.ui.screens.content.elements.DisabledAlpha
 
 @Composable
@@ -72,11 +71,6 @@ fun IntSliderSettingsCard(
         innerShape = innerShape
     ) {
         var showValueEditDialog by remember { mutableStateOf(false) }
-        val sliderState = rememberSyncedSliderState(
-            value = value.toFloat(),
-            steps = steps,
-            valueRange = valueRange
-        )
 
         Column(
             modifier = Modifier
@@ -95,14 +89,16 @@ fun IntSliderSettingsCard(
                 )
             }
             SimpleTextSlider(
-                state = sliderState,
                 modifier = Modifier.fillMaxWidth(),
+                value = value.toFloat(),
                 shorter = shorter,
                 enabled = enabled,
                 onValueChange = { onValueChange(it.toInt()) },
                 onValueChangeFinished = { onValueChangeFinished() },
                 onTextClick = { showValueEditDialog = true },
                 toInt = true,
+                valueRange = valueRange,
+                steps = steps,
                 suffix = suffix,
                 fineTuningControl = fineTuningControl,
                 fineTuningStep = 1f,
