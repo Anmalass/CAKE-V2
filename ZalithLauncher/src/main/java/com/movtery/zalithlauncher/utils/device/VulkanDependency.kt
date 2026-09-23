@@ -214,8 +214,12 @@ object VulkanRequirements {
 
     /** 各版本依赖的 Vulkan 扩展 */
     val EXTENSIONS: List<VulkanDependency> = listOf(
-        vulkanDependency("VK_KHR_dynamic_rendering") { requiredFrom(MIN_MC_VERSION) },
-        vulkanDependency("VK_KHR_push_descriptor") { requiredFrom(MIN_MC_VERSION) },
+        vulkanDependency("VK_KHR_dynamic_rendering") {
+            requiredBetween(MIN_MC_VERSION, "26.3")
+        },
+        vulkanDependency("VK_KHR_push_descriptor") {
+            requiredBetween(MIN_MC_VERSION, "26.3")
+        },
         vulkanDependency("VK_KHR_synchronization2") { requiredFrom(MIN_MC_VERSION) },
         vulkanDependency("VK_EXT_vertex_attribute_divisor") { requiredFrom(MIN_MC_VERSION) },
         vulkanDependency("VK_KHR_swapchain") { requiredFrom(MIN_MC_VERSION) }
@@ -237,7 +241,9 @@ object VulkanRequirements {
         vulkanDependency("timelineSemaphore") { requiredFrom(MIN_MC_VERSION) },
         vulkanDependency("hostQueryReset") { requiredFrom(MIN_MC_VERSION) },
         vulkanDependency("synchronization2") { requiredFrom(MIN_MC_VERSION) },
-        vulkanDependency("dynamicRendering") { requiredFrom(MIN_MC_VERSION) },
+        vulkanDependency("dynamicRendering") {
+            requiredBetween(MIN_MC_VERSION, "26.3")
+        },
         vulkanDependency("vertexAttributeInstanceRateDivisor") { requiredFrom(MIN_MC_VERSION) }
     )
 
