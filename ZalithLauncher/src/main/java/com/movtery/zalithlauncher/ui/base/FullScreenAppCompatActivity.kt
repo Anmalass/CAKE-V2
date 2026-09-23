@@ -30,6 +30,7 @@ import androidx.activity.compose.LocalActivity
 import androidx.annotation.CallSuper
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import kotlin.math.abs
 
 abstract class FullScreenAppCompatActivity : AbstractAppCompatActivity() {
     private var correctScaledMultiTouch = false
@@ -90,12 +91,11 @@ abstract class FullScreenAppCompatActivity : AbstractAppCompatActivity() {
         val localDeltaY = event.getY(1) - event.getY(0)
         val rawDeltaX = event.getRawX(1) - event.getRawX(0)
         val rawDeltaY = event.getRawY(1) - event.getRawY(0)
-        val mismatch = kotlin.math.abs(rawDeltaX - localDeltaX) > 1f ||
-                kotlin.math.abs(rawDeltaY - localDeltaY) > 1f
+        val mismatch = abs(rawDeltaX - localDeltaX) > 1f || abs(rawDeltaY - localDeltaY) > 1f
         return mismatch
     }
 
-    /** 将窗口局部坐标转换为 Compose 使用的屏幕坐标。 */
+    /** 检测窗口局部坐标系与物理屏幕坐标系之间是否存在缩放差异 */
     private fun isScaledWindowCoordinateSpace(): Boolean {
         if (Build.VERSION.SDK_INT < VERSION_CODES.R) return false
         val display = display ?: return false
@@ -109,10 +109,8 @@ abstract class FullScreenAppCompatActivity : AbstractAppCompatActivity() {
         val directHeightScale = decor.height.toFloat() / physicalHeight
         val swappedWidthScale = decor.width.toFloat() / physicalHeight
         val swappedHeightScale = decor.height.toFloat() / physicalWidth
-        val directError = kotlin.math.abs(directWidthScale - 1f) +
-                kotlin.math.abs(directHeightScale - 1f)
-        val swappedError = kotlin.math.abs(swappedWidthScale - 1f) +
-                kotlin.math.abs(swappedHeightScale - 1f)
+        val directError = abs(directWidthScale - 1f) + abs(directHeightScale - 1f)
+        val swappedError = abs(swappedWidthScale - 1f) + abs(swappedHeightScale - 1f)
         val widthScale: Float
         val heightScale: Float
         if (directError <= swappedError) {
@@ -122,8 +120,7 @@ abstract class FullScreenAppCompatActivity : AbstractAppCompatActivity() {
             widthScale = swappedWidthScale
             heightScale = swappedHeightScale
         }
-        return kotlin.math.abs(widthScale - 1f) > 0.01f ||
-                kotlin.math.abs(heightScale - 1f) > 0.01f
+        return abs(widthScale - 1f) > 0.01f || abs(heightScale - 1f) > 0.01f
     }
 
     private fun MotionEvent.copyWithLocalCoordinatesAndOriginalOffset(): MotionEvent {
