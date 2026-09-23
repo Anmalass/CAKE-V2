@@ -209,6 +209,8 @@ private fun vulkanDependency(name: String, block: VulkanDependencyBuilder.() -> 
  * 各 Minecraft 版本运行 Vulkan 后端所依赖的扩展与功能
  */
 object VulkanRequirements {
+    /** 当前 Vulkan 检测器版本 */
+    const val VULKAN_REQUIREMENTS_VERSION = 1
     /** 首个提供 Vulkan 后端的 Minecraft 版本 */
     const val MIN_MC_VERSION = "26.2"
 
