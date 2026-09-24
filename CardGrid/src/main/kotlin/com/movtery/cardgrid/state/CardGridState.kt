@@ -168,6 +168,11 @@ class CardGridState internal constructor(
     /** 卡片被移除后的回调（用于同步外部与该卡片关联的数据） */
     var onCardRemoved: (cardId: String) -> Unit = {}
 
+    /** 布局结算落盘；几何未就绪时的结算属于瞬态补位，不覆写有效的持久化数据 */
+    private fun commitLayout() {
+        if (geometryReady) onLayoutCommitted()
+    }
+
     /** 快速空间动画（拖动中的让位） */
     internal var fastSpec: AnimationSpec<Rect> = spring(
         dampingRatio = Spring.DampingRatioLowBouncy,
@@ -201,7 +206,7 @@ class CardGridState internal constructor(
 
     /**
      * 播种卡片类型与持久化的卡片布局：
-     * 类型表即刻生效，卡片布局待网格几何就绪后校验修复（列数一致）或按阅读顺序重排（列数不一致）。
+     * 类型表即刻生效，卡片布局待网格几何就绪后校验修复（列数一致或未知）或按阅读顺序重排（列数不一致）。
      * 重复 id 的卡片仅保留最先出现的一个，类型未知的卡片被丢弃。
      */
     fun seed(types: List<CardType>, seeds: List<CardSeed>, storedColumns: Int) {
@@ -214,11 +219,14 @@ class CardGridState internal constructor(
         if (geometryReady) materializePending(newColumns = geometry.columns)
     }
 
-    private fun materializePending(newColumns: Int) {
-        val pending = pendingSeeds ?: return
+    /**
+     * @return 是否播种了待播卡片
+     */
+    private fun materializePending(newColumns: Int): Boolean {
+        val pending = pendingSeeds ?: return false
         pendingSeeds = null
         val typeIdById = pending.associate { it.id to it.typeId }
-        val layouts = if (pendingColumns == newColumns) {
+        val layouts = if (pendingColumns == newColumns || pendingColumns <= 0) {
             GridEngine.validate(pending.map { it.layout }, newColumns) { rect ->
                 typeById[typeIdById[rect.id]]?.limits ?: CardLimits.DEFAULT
             }
@@ -237,14 +245,19 @@ class CardGridState internal constructor(
                 GridCard(id = seed.id, type = type, layout = layouts.getValue(seed.id))
             }
         }
-        cards = cards + materialized
+        //播种布局以持久化数据为准，替换几何就绪前先行补位加入的同 id 卡片，避免重复
+        val seededIds = materialized.mapTo(mutableSetOf()) { it.id }
+        cards = cards.filterNot { it.id in seededIds } + materialized
         materialized.forEach { animateTo(it, effectiveLayout(it), defaultSpec) }
+        return true
     }
 
     // ---------- 几何 ----------
 
-    /** 依据容器宽度更新网格；列数变化时触发整体重排 */
+    /** 依据容器宽度更新网格，列数变化时触发整体重排 */
     fun updateGeometry(widthDp: Float, density: Density) {
+        if (widthDp <= 0f) return // 宽度无效时忽略本次测量，避免瞬态零宽把网格重排进退化的几何
+        val wasReady = geometryReady
         val oldColumns = geometry.columns
         val newGeometry = computeGridGeometry(widthDp)
         cellPx = newGeometry.cellSize * density.density
@@ -253,11 +266,11 @@ class CardGridState internal constructor(
         }
         densityFactor = density.density
         geometry = newGeometry
-        if (widthDp > 0f) {
-            geometryReady = true
-            materializePending(newColumns = newGeometry.columns)
-        }
-        if (newGeometry.columns != oldColumns && cards.isNotEmpty()) {
+        geometryReady = true
+        //本次播种落位的卡片从未按旧几何布局，直接重排会按错误比例折算尺寸
+        val materialized = materializePending(newColumns = newGeometry.columns)
+        //旧几何来自真实测量时才视为列数变化；初始默认几何只用于占位，不参与重排
+        if (!materialized && wasReady && newGeometry.columns != oldColumns && cards.isNotEmpty()) {
             reflowTo(newColumns = newGeometry.columns, oldColumns = oldColumns)
         }
     }
@@ -299,7 +312,7 @@ class CardGridState internal constructor(
             layout = CardRect(id = id, x = slot.x, y = slot.y, width = width, height = height)
         )
         cards = cards + card
-        onLayoutCommitted()
+        commitLayout()
         return card
     }
 
@@ -313,7 +326,7 @@ class CardGridState internal constructor(
         if (adjustingCardId == id) adjustingCardId = null
         if (session?.card?.id == id) endSession()
         cards.forEach { card -> animateTo(card, effectiveLayout(card), defaultSpec) }
-        onLayoutCommitted()
+        commitLayout()
         onCardRemoved(id)
     }
 
@@ -588,7 +601,7 @@ class CardGridState internal constructor(
         settleSessionCard(current.card, rawRect, finalLayout)
         cards.filterNot { it.id == current.card.id }
             .forEach { animateTo(it, effectiveLayout(it), defaultSpec) }
-        onLayoutCommitted()
+        commitLayout()
     }
 
     /** 取消会话：让位卡与会话卡弹回原位，不产生任何结算 */
@@ -629,7 +642,7 @@ class CardGridState internal constructor(
         endSession()
         adjustingCardId = null
         animateAll()
-        onLayoutCommitted()
+        commitLayout()
     }
 
     // ---------- 内部：跟手矩形 ----------
