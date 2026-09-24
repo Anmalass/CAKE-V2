@@ -112,6 +112,63 @@ class CardGridStateTest {
         assertTrue(state.cards.isEmpty())
     }
 
+    @Test
+    fun testSeedBeforeFirstMeasurementSkipsInitialGeometryReflow() {
+        // 播种早于首次有效测量：卡片按持久化布局落位，不按初始默认几何重排
+        val state = CardGridState(scope)
+        state.seed(
+            types = listOf(testType),
+            seeds = listOf(CardSeed("A", "test", CardRect("A", 0, 0, 2, 2))),
+            storedColumns = 10
+        )
+        state.updateGeometry(200f, Density(1f))
+        assertEquals(CardRect("A", 0, 0, 4, 4), layoutOf(state, "A"))
+    }
+
+    @Test
+    fun testSeedWithUnknownStoredColumnsValidates() {
+        // 存储列数未知时不做比例折算，仅校验修复
+        val state = state()
+        state.seed(
+            types = listOf(testType),
+            seeds = listOf(CardSeed("A", "test", CardRect("A", 0, 0, 2, 2))),
+            storedColumns = 0
+        )
+        assertEquals(CardRect("A", 0, 0, 4, 4), layoutOf(state, "A"))
+    }
+
+    @Test
+    fun testSeedReplacesPreMaterializedCard() {
+        // 几何未就绪时补位逻辑先行加入同 id 卡片，播种应以持久化布局替换而非重复追加
+        val state = CardGridState(scope)
+        state.seed(
+            types = listOf(testType),
+            seeds = listOf(CardSeed("A", "test", CardRect("A", 2, 0, 4, 4))),
+            storedColumns = 10
+        )
+        state.addCard(testType, "A")
+        state.updateGeometry(200f, Density(1f))
+        assertEquals(1, state.cards.size)
+        assertEquals(CardRect("A", 2, 0, 4, 4), layoutOf(state, "A"))
+    }
+
+    @Test
+    fun testZeroWidthMeasurementIgnored() {
+        val state = seededState(CardRect("A", 0, 0, 4, 4))
+        state.updateGeometry(0f, Density(1f))
+        assertEquals(10, state.geometry.columns)
+        assertEquals(CardRect("A", 0, 0, 4, 4), layoutOf(state, "A"))
+    }
+
+    @Test
+    fun testAddCardBeforeGeometryReadySkipsPersistence() {
+        val state = CardGridState(scope)
+        var committed = false
+        state.onLayoutCommitted = { committed = true }
+        state.addCard(testType, "A")
+        assertFalse(committed)
+    }
+
     // ---------- 卡片管理 ----------
 
     @Test
