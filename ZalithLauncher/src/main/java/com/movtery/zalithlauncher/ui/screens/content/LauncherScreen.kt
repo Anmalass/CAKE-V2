@@ -21,12 +21,12 @@ package com.movtery.zalithlauncher.ui.screens.content
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
@@ -45,6 +45,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,17 +53,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -71,6 +77,8 @@ import com.movtery.zalithlauncher.R
 import com.movtery.zalithlauncher.game.account.AccountsManager
 import com.movtery.zalithlauncher.game.version.installed.Version
 import com.movtery.zalithlauncher.game.version.installed.VersionsManager
+import com.movtery.zalithlauncher.setting.AllSettings
+import com.movtery.zalithlauncher.setting.enums.ActionMenuSide
 import com.movtery.zalithlauncher.ui.base.BaseScreen
 import com.movtery.zalithlauncher.ui.components.BackgroundCard
 import com.movtery.zalithlauncher.ui.components.MarqueeText
@@ -81,10 +89,22 @@ import com.movtery.zalithlauncher.ui.screens.content.elements.AccountAvatar
 import com.movtery.zalithlauncher.ui.screens.content.elements.CommonVersionInfoLayout
 import com.movtery.zalithlauncher.ui.screens.content.elements.VersionIconImage
 import com.movtery.zalithlauncher.ui.screens.content.home.HomeGrid
+import com.movtery.zalithlauncher.ui.screens.content.home.LocalActionMenuDrag
+import com.movtery.zalithlauncher.ui.screens.content.home.actionMenuDragAnchor
+import com.movtery.zalithlauncher.ui.screens.content.home.rememberActionMenuDragState
 import com.movtery.zalithlauncher.ui.screens.content.home.version.LocalHomeCardLauncher
 import com.movtery.zalithlauncher.ui.screens.content.home.version.LocalHomeCardVersionSettings
 import com.movtery.zalithlauncher.utils.animation.swapAnimateDpAsState
 import com.movtery.zalithlauncher.viewmodel.ScreenBackStackViewModel
+import kotlin.math.roundToInt
+
+private const val ContentWeight = 7f
+private const val ActionMenuWeight = 3f
+
+/**
+ * 操作菜单停泊槽位与屏幕边缘的间距
+ */
+private val ActionMenuOuterPadding = 12.dp
 
 @Composable
 fun LauncherScreen(
@@ -97,25 +117,37 @@ fun LauncherScreen(
         screenKey = NormalNavKey.LauncherMain,
         currentKey = backStackViewModel.mainScreen.currentKey
     ) { isVisible ->
-        Row(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            CompositionLocalProvider(
-                LocalUriHandler provides object : UriHandler {
-                    override fun openUri(uri: String) {
-                        onOpenLink(uri)
-                    }
+        val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+        val dockedSide = AllSettings.launcherActionMenuSide.state
+        val dragState = rememberActionMenuDragState(
+            onCommit = { side -> AllSettings.launcherActionMenuSide.save(side) }
+        )
+        dragState.dockedSide = dockedSide
+        dragState.isRtl = isRtl
+
+        LaunchedEffect(isVisible) {
+            //屏幕切走时打断进行中的拖拽
+            if (!isVisible) dragState.onDragCancel()
+        }
+
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxSize()
+                .onGloballyPositioned { coordinates ->
+                    dragState.parentOrigin = coordinates.positionInRoot()
                 }
-            ) {
-                ContentMenu(
-                    modifier = Modifier.weight(7f),
-                    isVisible = isVisible,
-                    onLaunchGame = { version ->
-                        onLaunchGame(version)
-                    },
-                    onOpenVersionSettings = navigateToVersions
-                )
-            }
+        ) {
+            val parentWidthPx = constraints.maxWidth.toFloat()
+            dragState.parentWidthPx = parentWidthPx
+            dragState.outerPaddingPx = with(LocalDensity.current) { ActionMenuOuterPadding.toPx() }
+            dragState.menuSpanPx = parentWidthPx * (ActionMenuWeight / (ActionMenuWeight + ContentWeight))
+
+            //拖拽期间以预览侧为准
+            val effectiveSide = dragState.previewSide ?: dockedSide
+
+            //卡片尺寸与停泊槽内容区保持一致
+            val cardWidth = maxWidth * (ActionMenuWeight / (ActionMenuWeight + ContentWeight)) - ActionMenuOuterPadding
+            val cardHeight = maxHeight - ActionMenuOuterPadding * 2
 
             val toAccountManageScreen: () -> Unit = {
                 backStackViewModel.mainScreen.navigateTo(
@@ -134,17 +166,64 @@ fun LauncherScreen(
                 }
             }
 
-            RightMenu(
-                isVisible = isVisible,
-                modifier = Modifier
-                    .weight(3f)
-                    .fillMaxHeight()
-                    .padding(top = 12.dp, end = 12.dp, bottom = 12.dp),
-                onLaunchGame = onLaunchGame,
-                toAccountManageScreen = toAccountManageScreen,
-                toVersionManageScreen = toVersionManageScreen,
-                toVersionSettingsScreen = toVersionSettingsScreen
-            )
+            // 内容区域
+            Row(modifier = Modifier.fillMaxSize()) {
+                // ActionMenu 对接到了 Start，留出空位
+                if (dockedSide == ActionMenuSide.START) {
+                    Spacer(modifier = Modifier.weight(ActionMenuWeight))
+                }
+
+                CompositionLocalProvider(
+                    LocalUriHandler provides object : UriHandler {
+                        override fun openUri(uri: String) {
+                            onOpenLink(uri)
+                        }
+                    }
+                ) {
+                    ContentMenu(
+                        modifier = Modifier
+                            .weight(ContentWeight)
+                            .offset { IntOffset(x = dragState.previewShift.value.roundToInt(), y = 0) },
+                        isVisible = isVisible,
+                        onLaunchGame = { version ->
+                            onLaunchGame(version)
+                        },
+                        onOpenVersionSettings = navigateToVersions
+                    )
+                }
+
+                // ActionMenu 对接到了 End，留出空位
+                if (dockedSide == ActionMenuSide.END) {
+                    Spacer(modifier = Modifier.weight(ActionMenuWeight))
+                }
+            }
+
+            CompositionLocalProvider(LocalActionMenuDrag provides dragState) {
+                Box(
+                    modifier = Modifier
+                        .offset {
+                            val translation = if (dragState.floating) {
+                                dragState.cardPosition
+                            } else {
+                                dragState.landingOf(effectiveSide) + dragState.settleOffset.value
+                            }
+                            val x = if (isRtl) parentWidthPx - cardWidth.toPx() - translation.x else translation.x
+                            IntOffset(x.roundToInt(), translation.y.roundToInt())
+                        }
+                        .size(cardWidth, cardHeight)
+                ) {
+                    ActionMenu(
+                        modifier = Modifier.fillMaxSize(),
+                        isVisible = isVisible,
+                        onLaunchGame = onLaunchGame,
+                        swapTargetValue = if (dockedSide == ActionMenuSide.END) 40.dp else (-40).dp,
+                        pickUpScale = { dragState.scale },
+                        toAccountManageScreen = toAccountManageScreen,
+                        toVersionManageScreen = toVersionManageScreen,
+                        toVersionSettingsScreen = toVersionSettingsScreen
+                    )
+                }
+            }
         }
     }
 }
@@ -177,7 +256,7 @@ private fun ContentMenu(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun RightMenuContent(
+private fun ActionMenuContent(
     modifier: Modifier = Modifier,
     onLaunchGame: (Version?) -> Unit,
     toAccountManageScreen: () -> Unit,
@@ -323,25 +402,34 @@ private fun RightMenuContent(
 }
 
 @Composable
-private fun RightMenu(
+private fun ActionMenu(
     isVisible: Boolean,
     onLaunchGame: (Version?) -> Unit,
+    swapTargetValue: Dp,
+    pickUpScale: () -> Float,
     modifier: Modifier = Modifier,
     toAccountManageScreen: () -> Unit = {},
     toVersionManageScreen: () -> Unit = {},
     toVersionSettingsScreen: () -> Unit = {}
 ) {
     val xOffset by swapAnimateDpAsState(
-        targetValue = 40.dp,
+        targetValue = swapTargetValue,
         swapIn = isVisible,
         isHorizontal = true
     )
 
     BackgroundCard(
-        modifier = modifier.offset { IntOffset(x = xOffset.roundToPx(), y = 0) },
+        modifier = modifier
+            .actionMenuDragAnchor()
+            .graphicsLayer {
+                val scale = pickUpScale()
+                scaleX = scale
+                scaleY = scale
+            }
+            .offset { IntOffset(x = xOffset.roundToPx(), y = 0) },
         shape = MaterialTheme.shapes.extraLarge
     ) {
-        RightMenuContent(
+        ActionMenuContent(
             modifier = Modifier.fillMaxSize(),
             onLaunchGame = onLaunchGame,
             toAccountManageScreen = toAccountManageScreen,
